@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- 背景圆 -->
+  <circle cx="50" cy="50" r="46" fill="#1a237e" />
+  <circle cx="50" cy="50" r="42" fill="#283593" />
+  
+  <!-- 节点 -->
+  <circle cx="30" cy="30" r="10" fill="#ffeb3b" />
+  <circle cx="70" cy="30" r="8" fill="#4caf50" />
+  <circle cx="25" cy="70" r="7" fill="#f44336" />
+  <circle cx="65" cy="70" r="9" fill="#2196f3" />
+  <circle cx="50" cy="50" r="12" fill="#9c27b0" />
+  
+  <!-- 连线 -->
+  <line x1="30" y1="30" x2="70" y2="30" stroke="#fff" stroke-width="2" />
+  <line x1="30" y1="30" x2="25" y2="70" stroke="#fff" stroke-width="2" />
+  <line x1="30" y1="30" x2="50" y2="50" stroke="#fff" stroke-width="2" />
+  <line x1="70" y1="30" x2="65" y2="70" stroke="#fff" stroke-width="2" />
+  <line x1="70" y1="30" x2="50" y2="50" stroke="#fff" stroke-width="2" />
+  <line x1="25" y1="70" x2="65" y2="70" stroke="#fff" stroke-width="2" />
+  <line x1="25" y1="70" x2="50" y2="50" stroke="#fff" stroke-width="2" />
+  <line x1="65" y1="70" x2="50" y2="50" stroke="#fff" stroke-width="2" />
+</svg> 

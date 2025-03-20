@@ -1,0 +1,295 @@
+import axios from 'axios'
+
+const API_URL = 'http://localhost:7474'
+
+// 创建axios实例
+const apiClient = axios.create({
+  baseURL: API_URL,
+  timeout: 10000
+})
+
+// 请求拦截器，添加认证信息
+apiClient.interceptors.request.use(
+  config => {
+    const username = localStorage.getItem('username')
+    const password = localStorage.getItem('password')
+    if (username && password) {
+      config.auth = {
+        username: username,
+        password: password
+      }
+    }
+    return config
+  },
+  error => {
+    return Promise.reject(error)
+  }
+)
+
+// 响应拦截器
+apiClient.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response && error.response.status === 401) {
+      // 清除本地存储的认证信息
+      localStorage.removeItem('username')
+      localStorage.removeItem('password')
+      localStorage.removeItem('token')
+      
+      // 重定向到登录页
+      window.location.href = '/login'
+    }
+    return Promise.reject(error)
+  }
+)
+
+// 用户相关API
+export const userApi = {
+  // 登录
+  login(data) {
+    return apiClient.post('/user/login', data)
+  },
+  
+  // 注册
+  register(data) {
+    return apiClient.post('/user/register', data)
+  },
+  
+  // 登出
+  logout() {
+    return apiClient.post('/user/logout')
+  },
+  
+  // 修改密码
+  changePassword(username, data) {
+    return apiClient.post(`/user/${username}/password`, data)
+  },
+  
+  // 获取用户列表
+  getUserList() {
+    return apiClient.get('/user/list')
+  },
+  
+  // 获取用户日志
+  getUserLogs() {
+    return apiClient.get('/user/logs')
+  },
+  
+  // 获取用户状态
+  getUserStatus(username) {
+    return apiClient.get(`/user/${username}/status`)
+  }
+}
+
+// 节点相关API
+export const nodeApi = {
+  // 创建节点
+  createNode() {
+    return apiClient.post('/db/data/node')
+  },
+  
+  // 获取节点
+  getNode(id) {
+    return apiClient.get(`/db/data/node/${id}`)
+  },
+  
+  // 获取节点标签
+  getNodeLabels(id) {
+    return apiClient.get(`/db/data/node/${id}/labels`)
+  },
+  
+  // 添加节点标签
+  addNodeLabels(id, labels) {
+    return apiClient.post(`/db/data/node/${id}/labels`, labels)
+  },
+  
+  // 替换节点标签
+  replaceNodeLabels(id, labels) {
+    return apiClient.put(`/db/data/node/${id}/labels`, labels)
+  },
+  
+  // 删除节点标签
+  deleteNodeLabel(id, label) {
+    return apiClient.delete(`/db/data/node/${id}/labels/${label}`)
+  },
+  
+  // 获取节点属性
+  getNodeProperties(id) {
+    return apiClient.get(`/db/data/node/${id}/properties`)
+  },
+  
+  // 更新节点属性
+  updateNodeProperties(id, properties) {
+    return apiClient.put(`/db/data/node/${id}/properties`, properties)
+  },
+  
+  // 获取单个属性
+  getNodeProperty(id, key) {
+    return apiClient.get(`/db/data/node/${id}/properties/${key}`)
+  },
+  
+  // 设置单个属性
+  setNodeProperty(id, key, value) {
+    return apiClient.put(`/db/data/node/${id}/properties/${key}`, value)
+  },
+  
+  // 删除单个属性
+  deleteNodeProperty(id, key) {
+    return apiClient.delete(`/db/data/node/${id}/properties/${key}`)
+  },
+  
+  // 删除所有属性
+  deleteAllNodeProperties(id) {
+    return apiClient.delete(`/db/data/node/${id}/properties`)
+  },
+  
+  // 获取节点度数
+  getNodeDegree(id) {
+    return apiClient.get(`/db/data/node/${id}/degree/all`)
+  },
+  
+  // 删除节点
+  deleteNode(id) {
+    return apiClient.delete(`/db/data/node/${id}`)
+  },
+  
+  // 获取带特定标签的节点
+  getNodesByLabel(label) {
+    return apiClient.get(`/db/data/label/${label}/nodes`)
+  }
+}
+
+// 关系相关API
+export const relationshipApi = {
+  // 创建关系
+  createRelationship(nodeId, data) {
+    return apiClient.post(`/db/data/node/${nodeId}/relationships`, data)
+  },
+  
+  // 获取关系
+  getRelationship(id) {
+    return apiClient.get(`/db/data/relationship/${id}`)
+  },
+  
+  // 删除关系
+  deleteRelationship(id) {
+    return apiClient.delete(`/db/data/relationship/${id}`)
+  },
+  
+  // 获取关系属性
+  getRelationshipProperties(id) {
+    return apiClient.get(`/db/data/relationship/${id}/properties`)
+  },
+  
+  // 设置关系属性
+  setRelationshipProperties(id, properties) {
+    return apiClient.put(`/db/data/relationship/${id}/properties`, properties)
+  },
+  
+  // 获取单个关系属性
+  getRelationshipProperty(id, key) {
+    return apiClient.get(`/db/data/relationship/${id}/properties/${key}`)
+  },
+  
+  // 设置单个关系属性
+  setRelationshipProperty(id, key, value) {
+    return apiClient.put(`/db/data/relationship/${id}/properties/${key}`, value)
+  },
+  
+  // 删除单个关系属性
+  deleteRelationshipProperty(id, key) {
+    return apiClient.delete(`/db/data/relationship/${id}/properties/${key}`)
+  },
+  
+  // 删除所有关系属性
+  deleteAllRelationshipProperties(id) {
+    return apiClient.delete(`/db/data/relationship/${id}/properties`)
+  },
+  
+  // 获取所有关系
+  getAllRelationships(nodeId) {
+    return apiClient.get(`/db/data/node/${nodeId}/relationships/all`)
+  },
+  
+  // 获取传入关系
+  getIncomingRelationships(nodeId) {
+    return apiClient.get(`/db/data/node/${nodeId}/relationships/in`)
+  },
+  
+  // 获取传出关系
+  getOutgoingRelationships(nodeId) {
+    return apiClient.get(`/db/data/node/${nodeId}/relationships/out`)
+  },
+  
+  // 获取指定类型的关系
+  getRelationshipsByType(nodeId, type) {
+    return apiClient.get(`/db/data/node/${nodeId}/relationships/all/${type}`)
+  },
+  
+  // 获取关系类型
+  getRelationshipTypes() {
+    return apiClient.get('/db/data/relationship/types')
+  }
+}
+
+// 标签相关API
+export const labelApi = {
+  // 获取所有标签
+  getAllLabels() {
+    return apiClient.get('/db/data/labels')
+  }
+}
+
+// 数据库管理API
+export const databaseApi = {
+  // 启动数据库
+  startDatabase(dbName) {
+    return apiClient.post(`/db/data/database/${dbName}/start`)
+  },
+  
+  // 关闭数据库
+  stopDatabase() {
+    return apiClient.post('/db/data/database')
+  },
+  
+  // 备份数据库
+  backupDatabase(dbName) {
+    return apiClient.post(`/db/data/database/${dbName}/backup`)
+  },
+  
+  // 获取数据库状态
+  getDatabaseStatus(dbName) {
+    return apiClient.get(`/db/data/database/${dbName}/status`)
+  },
+  
+  // 获取数据库空间大小
+  getDatabaseSpace(dbName) {
+    return apiClient.get(`/databases/${dbName}/space`)
+  },
+  
+  // 获取数据库路径
+  getDatabasePath(dbName) {
+    return apiClient.get(`/db/data/database/${dbName}/path`)
+  }
+}
+
+// 系统信息API
+export const systemApi = {
+  // 获取CPU和内存占用
+  getSystemResources() {
+    return apiClient.get('/system/resources')
+  },
+  
+  // 获取线程数
+  getSystemThreads() {
+    return apiClient.get('/system/threads')
+  }
+}
+
+// 属性相关API
+export const propertyApi = {
+  // 获取所有属性键
+  getAllPropertyKeys() {
+    return apiClient.get('/db/data/propertykeys')
+  }
+} 
