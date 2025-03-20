@@ -74,10 +74,9 @@ const handleLogin = async () => {
     
     const res = await userApi.login(loginForm)
     
-    // 保存认证信息
-    localStorage.setItem('username', loginForm.username)
-    localStorage.setItem('password', loginForm.password)
-    localStorage.setItem('token', 'logged-in') // 模拟token，实际应使用后端返回的token
+    // 登录成功后只保存一个标志，不再保存用户名和密码
+    // 依赖服务器设置的会话cookie进行认证
+    localStorage.setItem('token', 'logged-in') // 用于前端判断是否已登录
     
     ElMessage.success('登录成功')
     router.push('/dashboard')

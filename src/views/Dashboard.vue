@@ -185,9 +185,7 @@ const handleLogout = async () => {
   try {
     await userApi.logout()
     
-    // 清除本地存储
-    localStorage.removeItem('username')
-    localStorage.removeItem('password')
+    // 只清除token标志
     localStorage.removeItem('token')
     
     ElMessage.success('已退出登录')
@@ -214,9 +212,6 @@ const handleChangePassword = async () => {
     
     ElMessage.success('密码修改成功')
     passwordDialogVisible.value = false
-    
-    // 更新本地存储的密码
-    localStorage.setItem('password', passwordForm.newPassword)
     
     // 重置表单
     passwordForm.currentPassword = ''

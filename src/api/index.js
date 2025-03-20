@@ -5,20 +5,13 @@ const API_URL = 'http://localhost:7474'
 // 创建axios实例
 const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 10000
+  timeout: 10000,
+  withCredentials: true
 })
 
 // 请求拦截器，添加认证信息
 apiClient.interceptors.request.use(
   config => {
-    const username = localStorage.getItem('username')
-    const password = localStorage.getItem('password')
-    if (username && password) {
-      config.auth = {
-        username: username,
-        password: password
-      }
-    }
     return config
   },
   error => {
@@ -32,8 +25,6 @@ apiClient.interceptors.response.use(
   error => {
     if (error.response && error.response.status === 401) {
       // 清除本地存储的认证信息
-      localStorage.removeItem('username')
-      localStorage.removeItem('password')
       localStorage.removeItem('token')
       
       // 重定向到登录页
