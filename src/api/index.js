@@ -233,6 +233,11 @@ export const labelApi = {
 
 // 数据库管理API
 export const databaseApi = {
+  // 获取用户的数据库列表
+  getUserDatabases() {
+    return apiClient.get('/db/data/databases')
+  },
+  
   // 启动数据库
   startDatabase(dbName) {
     return apiClient.post(`/db/data/database/${dbName}/start`)

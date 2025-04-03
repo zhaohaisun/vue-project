@@ -16,10 +16,16 @@ const routes = [
     component: () => import('../views/Register.vue')
   },
   {
+    path: '/select-database',
+    name: 'DatabaseSelector',
+    component: () => import('../views/DatabaseSelector.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('../views/Dashboard.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiresDatabase: true },
     children: [
       {
         path: '',
@@ -62,15 +68,28 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, from, next) => {
   const isAuthenticated = localStorage.getItem('token')
+  const hasSelectedDatabase = localStorage.getItem('currentDatabase')
   
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!isAuthenticated) {
       next({ name: 'Login' })
+    } else if (to.matched.some(record => record.meta.requiresDatabase) && !hasSelectedDatabase) {
+      // 已登录但未选择数据库，重定向到数据库选择页面
+      next({ name: 'DatabaseSelector' })
     } else {
       next()
     }
   } else {
-    next()
+    if (to.name === 'Login' && isAuthenticated) {
+      // 已登录用户访问登录页，重定向到数据库选择或仪表盘
+      if (hasSelectedDatabase) {
+        next({ name: 'GraphView' })
+      } else {
+        next({ name: 'DatabaseSelector' })
+      }
+    } else {
+      next()
+    }
   }
 })
 

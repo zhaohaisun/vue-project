@@ -79,7 +79,7 @@ const handleLogin = async () => {
     localStorage.setItem('token', 'logged-in') // 用于前端判断是否已登录
     
     ElMessage.success('登录成功')
-    router.push('/dashboard')
+    router.push('/select-database')
   } catch (error) {
     console.error('登录失败:', error)
     ElMessage.error(error.response?.data?.message || '登录失败，请检查用户名和密码')

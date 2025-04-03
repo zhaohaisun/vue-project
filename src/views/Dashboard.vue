@@ -46,6 +46,9 @@
             </el-breadcrumb>
           </div>
           <div class="header-right">
+            <div class="db-info" v-if="currentDatabase">
+              <el-tag size="small" type="success">当前数据库: {{ currentDatabase }}</el-tag>
+            </div>
             <el-dropdown @command="handleCommand">
               <span class="user-dropdown">
                 {{ username }}
@@ -54,6 +57,7 @@
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item command="changePassword">修改密码</el-dropdown-item>
+                  <el-dropdown-item command="switchDatabase">切换数据库</el-dropdown-item>
                   <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -110,7 +114,8 @@ const route = useRoute()
 const router = useRouter()
 
 // 用户信息
-const username = ref(localStorage.getItem('username') || '用户')
+const username = ref('用户')
+const currentDatabase = ref(localStorage.getItem('currentDatabase') || '')
 
 // 侧边栏活动菜单
 const activeMenu = computed(() => route.path)
@@ -177,7 +182,17 @@ const handleCommand = (command) => {
     handleLogout()
   } else if (command === 'changePassword') {
     passwordDialogVisible.value = true
+  } else if (command === 'switchDatabase') {
+    switchDatabase()
   }
+}
+
+// 切换数据库
+const switchDatabase = () => {
+  // 清除当前选择的数据库
+  localStorage.removeItem('currentDatabase')
+  // 跳转到数据库选择页面
+  router.push('/select-database')
 }
 
 // 登出
@@ -226,10 +241,19 @@ const handleChangePassword = async () => {
 }
 
 // 检查是否已登录
-onMounted(() => {
+onMounted(async () => {
   const token = localStorage.getItem('token')
   if (!token) {
     router.push('/login')
+    return
+  }
+  
+  try {
+    // 这里可以添加获取用户信息的API调用，以显示正确的用户名
+    // 例如：const userInfo = await userApi.getCurrentUser()
+    // username.value = userInfo.username
+  } catch (error) {
+    console.error('获取用户信息失败:', error)
   }
 })
 </script>
@@ -289,6 +313,10 @@ onMounted(() => {
 .header-right {
   display: flex;
   align-items: center;
+}
+
+.db-info {
+  margin-right: 20px;
 }
 
 .user-dropdown {
