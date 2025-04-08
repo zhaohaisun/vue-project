@@ -29,56 +29,23 @@
         </div>
         
         <div class="map">
-          <svg :width="svgWidth" :height="svgHeight" @wheel="handleZoom" @mousedown="startPan" @mousemove="pan" @mouseup="endPan" @mouseleave="endPan">
-            <!-- 背景 -->
-            <rect x="0" y="0" :width="svgWidth" :height="svgHeight" fill="#F0F0F0" />
-            
-            <!-- 边/路径 -->
-            <g v-for="(edge, index) in transformedEdges" :key="`edge-${index}`">
-              <line
-                :x1="edge.source.x"
-                :y1="edge.source.y"
-                :x2="edge.target.x"
-                :y2="edge.target.y"
-                :stroke="edge.color"
-                stroke-width="2"
-                @mouseover="activeEdge = edge"
-                @mouseleave="activeEdge = null"
-              />
-            </g>
-            
-            <!-- 节点 -->
-            <g v-for="node in transformedNodes" :key="`node-${node.id}`">
-              <circle
-                :cx="node.x"
-                :cy="node.y"
-                r="3"
-                fill="#3388ff"
-                @mouseover="activeNode = node"
-                @mouseleave="activeNode = null"
-              />
-            </g>
-            
-            <!-- 悬停提示 -->
-            <g v-if="activeNode" class="tooltip">
-              <rect :x="activeNode.x + 10" :y="activeNode.y - 10" width="120" height="30" fill="white" stroke="#333" rx="3" />
-              <text :x="activeNode.x + 15" :y="activeNode.y + 10" fill="#333">ID: {{ activeNode.id }}</text>
-            </g>
-            <g v-if="activeEdge" class="tooltip">
-              <rect :x="(activeEdge.source.x + activeEdge.target.x) / 2 + 10" :y="(activeEdge.source.y + activeEdge.target.y) / 2 - 10" width="150" height="30" fill="white" stroke="#333" rx="3" />
-              <text :x="(activeEdge.source.x + activeEdge.target.x) / 2 + 15" :y="(activeEdge.source.y + activeEdge.target.y) / 2 + 10" fill="#333">{{ activeEdge.label || '道路' }}</text>
-            </g>
-            
-            <!-- 比例尺和控制面板 -->
-            <g class="controls" transform="translate(20, 20)">
-              <rect x="0" y="0" width="120" height="80" fill="white" stroke="#ccc" rx="3" />
-              <text x="10" y="20" fill="#333">缩放: {{ zoomLevel.toFixed(1) }}x</text>
-              <g transform="translate(10, 30)">
-                <rect width="100" height="20" fill="#f0f0f0" stroke="#ccc" rx="3" @click="resetZoom" />
-                <text x="20" y="14" fill="#333">重置视图</text>
-              </g>
-            </g>
-          </svg>
+          <canvas 
+            ref="mapCanvas"
+            :width="canvasWidth"
+            :height="canvasHeight"
+            @wheel="handleZoom"
+            @mousedown="startPan"
+            @mousemove="pan"
+            @mouseup="endPan"
+            @mouseleave="endPan"
+            style="cursor: grab;"
+          ></canvas>
+          
+          <!-- 控制面板可以保持在Canvas之外 -->
+          <div class="controls">
+            <span>缩放: {{ zoomLevel.toFixed(1) }}x</span>
+            <el-button size="small" @click="resetZoom">重置视图</el-button>
+          </div>
         </div>
       </div>
     </el-card>
@@ -86,15 +53,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import Papa from 'papaparse'
 
-// SVG地图配置
-const svgWidth = ref(1200)
-const svgHeight = ref(800)
-const padding = 50 // 边缘留白
+// Canvas地图配置
+const canvasWidth = ref(1200)
+const canvasHeight = ref(800)
+const padding = 50 // 边缘留白，用于坐标计算
+const mapCanvas = ref(null)
+let ctx = null
 
 // 交互状态
 const zoomLevel = ref(1)
@@ -110,39 +79,101 @@ const nodes = ref([])
 const edges = ref([])
 const nodeMap = ref({}) // 节点ID到节点对象的映射
 
-// 计算转换后的节点和边（应用缩放和平移）
-const transformedNodes = computed(() => {
-  return nodes.value.map(node => ({
-    ...node,
-    x: (node.x * zoomLevel.value) + panOffset.value.x,
-    y: (node.y * zoomLevel.value) + panOffset.value.y
-  }))
-})
+// -----------------
+// 坐标转换辅助函数 <--- 添加这里
+// -----------------
+const transformX = (x) => (x * zoomLevel.value) + panOffset.value.x
+const transformY = (y) => (y * zoomLevel.value) + panOffset.value.y
 
-const transformedEdges = computed(() => {
-  return edges.value.map(edge => ({
-    ...edge,
-    source: {
-      x: (edge.source.x * zoomLevel.value) + panOffset.value.x,
-      y: (edge.source.y * zoomLevel.value) + panOffset.value.y
-    },
-    target: {
-      x: (edge.target.x * zoomLevel.value) + panOffset.value.x,
-      y: (edge.target.y * zoomLevel.value) + panOffset.value.y
+// 绘图逻辑
+const drawMap = () => {
+  if (!ctx) return
+  
+  // 清除画布
+  ctx.fillStyle = '#F0F0F0' // 背景色
+  ctx.fillRect(0, 0, canvasWidth.value, canvasHeight.value)
+
+  // 优化：只绘制视口内的元素
+  const viewMinX = 0
+  const viewMinY = 0
+  const viewMaxX = canvasWidth.value
+  const viewMaxY = canvasHeight.value
+
+  // 绘制边
+  ctx.lineWidth = 1 / zoomLevel.value * 2 // 根据缩放调整线条粗细
+  for (const edge of edges.value) {
+    const sourceNode = nodeMap.value[edge.source.id]
+    const targetNode = nodeMap.value[edge.target.id]
+    if (!sourceNode || !targetNode) continue // 跳过无效边
+
+    const sourceX = transformX(sourceNode.x)
+    const sourceY = transformY(sourceNode.y)
+    const targetX = transformX(targetNode.x)
+    const targetY = transformY(targetNode.y)
+    
+    // 简单的视口剔除 (检查线段的包围盒是否与视口相交)
+    const minX = Math.min(sourceX, targetX)
+    const maxX = Math.max(sourceX, targetX)
+    const minY = Math.min(sourceY, targetY)
+    const maxY = Math.max(sourceY, targetY)
+    
+    if (maxX >= viewMinX && minX <= viewMaxX && maxY >= viewMinY && minY <= viewMaxY) {
+      ctx.strokeStyle = edge.color
+      ctx.beginPath()
+      ctx.moveTo(sourceX, sourceY)
+      ctx.lineTo(targetX, targetY)
+      ctx.stroke()
     }
-  }))
-})
+  }
+
+  // 绘制节点 (当缩放级别足够大时才绘制，以提高性能)
+  const nodeRadius = 1 / zoomLevel.value * 2 // 根据缩放调整节点大小
+  if (nodeRadius > 0.5) { // 只有当节点半径大于0.5像素时才绘制
+    ctx.fillStyle = '#3388ff'
+    for (const node of nodes.value) {
+      const x = transformX(node.x)
+      const y = transformY(node.y)
+      
+      // 视口剔除
+      if (x + nodeRadius >= viewMinX && x - nodeRadius <= viewMaxX && y + nodeRadius >= viewMinY && y - nodeRadius <= viewMaxY) {
+        ctx.beginPath()
+        ctx.arc(x, y, nodeRadius, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+  }
+}
 
 // 地图交互处理
 const handleZoom = (event) => {
   event.preventDefault()
-  const delta = event.deltaY > 0 ? -0.1 : 0.1
-  const newZoom = Math.max(0.5, Math.min(5, zoomLevel.value + delta))
-  zoomLevel.value = newZoom
+  
+  const rect = mapCanvas.value.getBoundingClientRect();
+  const mouseX = event.clientX - rect.left; // 鼠标在Canvas内的X坐标
+  const mouseY = event.clientY - rect.top;  // 鼠标在Canvas内的Y坐标
+
+  // 计算鼠标指向的地图坐标 (逆转换)
+  const mapMouseX = (mouseX - panOffset.value.x) / zoomLevel.value;
+  const mapMouseY = (mouseY - panOffset.value.y) / zoomLevel.value;
+
+  // 计算缩放因子
+  const scaleMultiplier = event.deltaY < 0 ? 1.1 : 1 / 1.1;
+  const newZoom = Math.max(0.1, Math.min(10, zoomLevel.value * scaleMultiplier));
+
+  // 更新缩放级别
+  zoomLevel.value = newZoom;
+
+  // 更新平移量，使鼠标指向的点保持在原地
+  panOffset.value.x = mouseX - mapMouseX * newZoom;
+  panOffset.value.y = mouseY - mapMouseY * newZoom;
+
+  // 使用 requestAnimationFrame 优化重绘
+  requestAnimationFrame(drawMap);
 }
 
 const startPan = (event) => {
   isPanning.value = true
+  mapCanvas.value.style.cursor = 'grabbing'
   startPanPos.value = { x: event.clientX, y: event.clientY }
 }
 
@@ -155,16 +186,22 @@ const pan = (event) => {
     x: panOffset.value.x + dx,
     y: panOffset.value.y + dy
   }
+  // 使用 requestAnimationFrame 优化重绘
+  requestAnimationFrame(drawMap);
 }
 
 const endPan = () => {
-  isPanning.value = false
+  if (isPanning.value) {
+    isPanning.value = false
+    mapCanvas.value.style.cursor = 'grab'
+  }
 }
 
 const resetZoom = () => {
   zoomLevel.value = 1
   panOffset.value = { x: 0, y: 0 }
   fitMapToBounds()
+  requestAnimationFrame(drawMap);
 }
 
 // 路况类型对应颜色
@@ -183,6 +220,10 @@ const roadTypeColors = {
 // 加载CSV数据
 const loadMapData = async () => {
   loading.value = true
+  nodes.value = []
+  edges.value = []
+  nodeMap.value = {}
+  ctx = null // 重置上下文
   try {
     // 首先加载节点数据
     await loadNodeData()
@@ -191,15 +232,33 @@ const loadMapData = async () => {
     
     // 数据加载完成后，计算布局并适应视图范围
     computeCoordinates()
-    fitMapToBounds()
+    fitMapToBounds() // 重置视图
     
-    ElMessage.success('地图数据加载成功')
+    // 数据加载完毕，准备渲染
+    loading.value = false // 先设置loading为false，让canvas渲染出来
+    
+    await nextTick() // 等待DOM更新，确保canvas元素已存在
+    
+    if (mapCanvas.value) {
+       ctx = mapCanvas.value.getContext('2d')
+       if (ctx) {
+         console.log('Canvas 2D 上下文获取成功')
+         drawMap() // 初始绘制
+         ElMessage.success('地图数据加载成功')
+       } else {
+         throw new Error('无法获取Canvas 2D上下文')
+       }
+    } else {
+       // 如果nextTick后仍然找不到canvas，则提示错误
+      console.error('Canvas ref (mapCanvas) 在 nextTick 后仍然无效');
+      throw new Error('Canvas元素未在DOM中找到，无法进行绘制')
+    }
   } catch (error) {
-    console.error('加载地图数据失败：', error)
-    ElMessage.error('加载地图数据失败')
-  } finally {
-    loading.value = false
+    console.error('加载或绘制地图数据失败：', error)
+    ElMessage.error(`加载地图数据失败: ${error.message}`)
+    loading.value = false // 确保出错时也关闭loading状态
   }
+  // loading 在成功获取上下文并绘制后保持false，出错时也设置为false
 }
 
 // 加载节点数据
@@ -214,14 +273,12 @@ const loadNodeData = () => {
         console.log('节点数据样例:', results.data.slice(0, 5));
         console.log('节点数据列:', results.meta.fields);
         
-        // 处理并保存节点数据
         nodes.value = results.data.filter(row => row.Id && row.latitude && row.longitude).map(row => {
           const node = {
             id: row.Id,
             latitude: parseFloat(row.latitude),
             longitude: parseFloat(row.longitude),
-            // 初始不设置SVG坐标，后面会计算
-            x: 0,
+            x: 0, // 初始SVG坐标
             y: 0
           }
           nodeMap.value[node.id] = node
@@ -250,17 +307,13 @@ const loadEdgeData = () => {
         console.log('边数据样例:', results.data.slice(0, 5));
         console.log('边数据列:', results.meta.fields);
         
-        // 处理并保存边数据
         edges.value = results.data.reduce((validEdges, row) => {
           const sourceId = row.Source;
           const targetId = row.Target;
           
-          // 只有当源节点和目标节点都在节点映射中时，才添加边
           if (nodeMap.value[sourceId] && nodeMap.value[targetId]) {
             const source = nodeMap.value[sourceId];
             const target = nodeMap.value[targetId];
-            
-            // 使用highwayType作为道路类型
             const roadType = row.highwayType || 'default';
             
             validEdges.push({
@@ -273,7 +326,6 @@ const loadEdgeData = () => {
               color: roadTypeColors[roadType] || roadTypeColors.default
             });
           }
-          
           return validEdges;
         }, []);
         
@@ -288,11 +340,10 @@ const loadEdgeData = () => {
   });
 }
 
-// 将经纬度转换为SVG坐标
+// 将经纬度转换为初始Canvas坐标
 const computeCoordinates = () => {
   if (nodes.value.length === 0) return
   
-  // 计算经纬度范围
   let minLat = Number.MAX_VALUE
   let maxLat = Number.MIN_VALUE
   let minLng = Number.MAX_VALUE
@@ -305,39 +356,59 @@ const computeCoordinates = () => {
     maxLng = Math.max(maxLng, node.longitude)
   })
   
-  // 计算缩放比例，保持宽高比
   const latRange = maxLat - minLat
   const lngRange = maxLng - minLng
-  const mapWidth = svgWidth.value - padding * 2
-  const mapHeight = svgHeight.value - padding * 2
+  const mapWidth = canvasWidth.value - padding * 2
+  const mapHeight = canvasHeight.value - padding * 2
   
+  // 计算初始缩放比例，以适应画布
   const scale = Math.min(
-    mapWidth / lngRange,
-    mapHeight / latRange
+    mapWidth / (lngRange || 1), // 防止除以0
+    mapHeight / (latRange || 1)
   )
   
-  // 转换所有节点的坐标
+  // 计算偏移量使地图居中
+  const initialOffsetX = (canvasWidth.value - lngRange * scale) / 2;
+  const initialOffsetY = (canvasHeight.value - latRange * scale) / 2;
+  
+  // 转换所有节点的初始坐标
   nodes.value.forEach(node => {
-    // 经度在水平方向（X轴）
-    node.x = padding + ((node.longitude - minLng) * scale)
-    // 纬度在垂直方向（Y轴），注意纬度需要反转，因为SVG的Y轴向下
-    node.y = mapHeight + padding - ((node.latitude - minLat) * scale)
+    node.x = initialOffsetX + ((node.longitude - minLng) * scale)
+    node.y = initialOffsetY + (mapHeight - ((node.latitude - minLat) * scale)) // Y轴反转
   })
 }
 
-// 调整视图以显示所有节点
+// 重置视图到初始状态
 const fitMapToBounds = () => {
-  // 重置缩放和平移
-  zoomLevel.value = 1
-  panOffset.value = { x: 0, y: 0 }
+  zoomLevel.value = 1 // 重置缩放为1
+  // 计算居中偏移量
+  if (nodes.value.length > 0) {
+    let minX = Number.MAX_VALUE, maxX = Number.MIN_VALUE, minY = Number.MAX_VALUE, maxY = Number.MIN_VALUE;
+    nodes.value.forEach(n => {
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
+    });
+    const boundsWidth = maxX - minX;
+    const boundsHeight = maxY - minY;
+    // 简单的居中偏移计算
+    panOffset.value = {
+       x: (canvasWidth.value - boundsWidth) / 2 - minX,
+       y: (canvasHeight.value - boundsHeight) / 2 - minY
+    }
+  } else {
+    panOffset.value = { x: 0, y: 0 };
+  }
 }
 
 // 组件加载完成后自动加载地图数据
 onMounted(() => {
-  // 页面加载完成后等待一会儿再加载数据
+  // 不再在onMounted中获取上下文，移至loadMapData内部
+  // 延迟加载数据
   setTimeout(() => {
     loadMapData()
-  }, 1000)
+  }, 500) 
 })
 </script>
 
@@ -377,21 +448,16 @@ onMounted(() => {
 
 .map {
   width: 100%;
-  height: 800px;
+  height: 800px; /* 或者根据需要调整 */
   border-radius: 4px;
   overflow: hidden;
   border: 1px solid #e6e6e6;
   background-color: #f9f9f9;
+  position: relative; /* 为控制面板定位 */
 }
 
-.map svg {
-  width: 100%;
-  height: 100%;
-  cursor: grab;
-}
-
-.map svg:active {
-  cursor: grabbing;
+.map canvas {
+  display: block; /* 移除canvas底部空白 */
 }
 
 .map-stats {
@@ -406,13 +472,21 @@ onMounted(() => {
   color: #606266;
 }
 
-.tooltip text {
-  font-size: 12px;
-  dominant-baseline: middle;
+/* 控制面板样式 */
+.controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background-color: rgba(255, 255, 255, 0.8);
+  padding: 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
 }
 
-.controls rect:hover {
-  fill: #e0e0e0;
-  cursor: pointer;
+.controls span {
+  font-size: 12px;
 }
 </style> 
