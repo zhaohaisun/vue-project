@@ -1,4 +1,4 @@
-<template>
+ <template>
   <div class="dashboard">
     <el-container class="dashboard-container">
       <el-aside width="240px" class="dashboard-aside">
@@ -33,6 +33,10 @@
           <el-menu-item index="/dashboard/system">
             <el-icon><Monitor /></el-icon>
             <span>系统信息</span>
+          </el-menu-item>
+          <el-menu-item index="/dashboard/map">
+            <el-icon><Location /></el-icon>
+            <span>地图可视化</span>
           </el-menu-item>
         </el-menu>
       </el-aside>
@@ -105,7 +109,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
   Share, Connection, Link, DataAnalysis, Monitor, 
-  ArrowDown 
+  ArrowDown, Location 
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userApi } from '../api'
@@ -128,6 +132,7 @@ const currentRoute = computed(() => {
   if (path.includes('relationships')) return '关系管理'
   if (path.includes('database')) return '数据库管理'
   if (path.includes('system')) return '系统信息'
+  if (path.includes('map')) return '地图可视化'
   return '首页'
 })
 

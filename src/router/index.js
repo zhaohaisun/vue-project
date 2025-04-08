@@ -55,6 +55,11 @@ const routes = [
         path: 'system',
         name: 'SystemInfo',
         component: () => import('../views/SystemInfo.vue')
+      },
+      {
+        path: 'map',
+        name: 'MapVisualization',
+        component: () => import('../views/MapVisualization.vue')
       }
     ]
   }
