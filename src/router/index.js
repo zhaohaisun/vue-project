@@ -60,6 +60,11 @@ const routes = [
         path: 'map',
         name: 'MapVisualization',
         component: () => import('../views/MapVisualization.vue')
+      },
+      {
+        path: 'import',
+        name: 'DataImport',
+        component: () => import('../views/DataImport.vue')
       }
     ]
   }

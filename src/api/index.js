@@ -75,8 +75,10 @@ export const userApi = {
 // 节点相关API
 export const nodeApi = {
   // 创建节点
-  createNode() {
-    return apiClient.post('/db/data/node')
+  createNode(properties) {
+    // 如果提供了properties参数，则发送该数据创建带属性的节点
+    // 否则创建空节点
+    return apiClient.post('/db/data/node', properties)
   },
   
   // 获取节点
@@ -153,8 +155,20 @@ export const nodeApi = {
 // 关系相关API
 export const relationshipApi = {
   // 创建关系
-  createRelationship(nodeId, data) {
-    return apiClient.post(`/db/data/node/${nodeId}/relationships`, data)
+  createRelationship(sourceNodeId, targetNodeId, type, properties) {
+    // 构建符合API要求的请求数据
+    const relationshipData = {
+      to: `${API_URL}/db/data/node/${targetNodeId}`,
+      type: type
+    }
+    
+    // 如果提供了属性，则添加到请求数据中
+    if (properties) {
+      relationshipData.data = properties
+    }
+    
+    // 发送请求创建关系
+    return apiClient.post(`/db/data/node/${sourceNodeId}/relationships`, relationshipData)
   },
   
   // 获取关系
@@ -288,4 +302,115 @@ export const propertyApi = {
   getAllPropertyKeys() {
     return apiClient.get('/db/data/propertykeys')
   }
-} 
+}
+
+
+// API基础URL配置
+const API_URL_API = 'http://localhost:7474/api'
+
+// 创建axios实例
+const api = axios.create({
+  baseURL: API_URL_API,
+  headers: {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json'
+  }
+})
+
+// 认证相关API
+export const login = (username, password) => {
+  return api.post('/auth/login', { username, password })
+}
+
+export const logout = () => {
+  return api.post('/auth/logout')
+}
+
+export const register = (username, password, email) => {
+  return api.post('/auth/register', { username, password, email })
+}
+
+export const changePassword = (userId, currentPassword, newPassword) => {
+  return api.post('/auth/change-password', { userId, currentPassword, newPassword })
+}
+
+// 数据库管理API
+export const getDatabaseStatus = () => {
+  return api.get('/db/status')
+}
+
+export const startDatabase = () => {
+  return api.post('/db/start')
+}
+
+export const stopDatabase = () => {
+  return api.post('/db/stop')
+}
+
+export const backupDatabase = () => {
+  return api.post('/db/backup')
+}
+
+export const getDatabaseUsers = () => {
+  return api.get('/db/users')
+}
+
+export const resetUserPassword = (userId, newPassword) => {
+  return api.post('/db/users/reset-password', { userId, newPassword })
+}
+
+// 系统信息API
+export const getSystemInfo = () => {
+  return api.get('/system/info')
+}
+
+// 节点相关API
+export const createNode = (label, properties) => {
+  return api.post('/nodes', { label, properties })
+    .then(response => response.data)
+}
+
+export const getNode = (nodeId) => {
+  return api.get(`/nodes/${nodeId}`)
+}
+
+export const updateNode = (nodeId, properties) => {
+  return api.put(`/nodes/${nodeId}`, { properties })
+}
+
+export const deleteNode = (nodeId) => {
+  return api.delete(`/nodes/${nodeId}`)
+}
+
+// 关系相关API
+export const createRelationship = (sourceId, targetId, type, properties) => {
+  return api.post('/relationships', { 
+    sourceId, 
+    targetId, 
+    type, 
+    properties 
+  }).then(response => response.data)
+}
+
+export const getRelationship = (relationshipId) => {
+  return api.get(`/relationships/${relationshipId}`)
+}
+
+export const updateRelationship = (relationshipId, properties) => {
+  return api.put(`/relationships/${relationshipId}`, { properties })
+}
+
+export const deleteRelationship = (relationshipId) => {
+  return api.delete(`/relationships/${relationshipId}`)
+}
+
+// 图查询API
+export const executeQuery = (query, parameters) => {
+  return api.post('/query', { query, parameters })
+}
+
+export const getGraph = (limit = 100) => {
+  return api.get(`/graph?limit=${limit}`)
+}
+
+export default api 

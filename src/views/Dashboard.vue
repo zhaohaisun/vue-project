@@ -26,6 +26,10 @@
             <el-icon><Link /></el-icon>
             <span>关系管理</span>
           </el-menu-item>
+          <el-menu-item index="/dashboard/import">
+            <el-icon><Upload /></el-icon>
+            <span>数据导入</span>
+          </el-menu-item>
           <el-menu-item index="/dashboard/database">
             <el-icon><DataAnalysis /></el-icon>
             <span>数据库管理</span>
@@ -109,7 +113,7 @@ import { ref, computed, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
   Share, Connection, Link, DataAnalysis, Monitor, 
-  ArrowDown, Location 
+  ArrowDown, Location, Upload 
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { userApi } from '../api'
@@ -130,6 +134,7 @@ const currentRoute = computed(() => {
   if (path.includes('graph')) return '图谱视图'
   if (path.includes('nodes')) return '节点管理'
   if (path.includes('relationships')) return '关系管理'
+  if (path.includes('import')) return '数据导入'
   if (path.includes('database')) return '数据库管理'
   if (path.includes('system')) return '系统信息'
   if (path.includes('map')) return '地图可视化'
