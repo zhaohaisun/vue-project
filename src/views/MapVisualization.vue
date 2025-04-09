@@ -100,7 +100,10 @@ const drawMap = () => {
   const viewMaxY = canvasHeight.value
 
   // 绘制边
-  ctx.lineWidth = 1 / zoomLevel.value * 2 // 根据缩放调整线条粗细
+  // 边的宽度在缩小时变细，放大时保持适当粗细
+  const edgeWidth = Math.min(2, Math.max(0.5, zoomLevel.value * 0.5));
+  ctx.lineWidth = edgeWidth;
+  
   for (const edge of edges.value) {
     const sourceNode = nodeMap.value[edge.source.id]
     const targetNode = nodeMap.value[edge.target.id]
@@ -126,19 +129,48 @@ const drawMap = () => {
     }
   }
 
-  // 绘制节点 (当缩放级别足够大时才绘制，以提高性能)
-  const nodeRadius = 1 / zoomLevel.value * 2 // 根据缩放调整节点大小
-  if (nodeRadius > 0.5) { // 只有当节点半径大于0.5像素时才绘制
-    ctx.fillStyle = '#3388ff'
+  // 绘制节点 - 节点大小在放大时变大，缩小时变小
+  // 基础节点大小 - 减小为原来的一半
+  const baseNodeRadius = 1; // 从2减小到1
+  
+  // 优化节点大小计算，使高缩放级别下节点保持合理大小
+  // 使用对数函数使节点大小增长更加缓慢
+  let nodeRadius;
+  if (zoomLevel.value <= 1) {
+    // 当缩放小于1时，线性缩放，但减小最小值
+    nodeRadius = Math.max(0.25, zoomLevel.value * baseNodeRadius); // 最小值从0.5减小到0.25
+  } else {
+    // 当缩放大于1时，使用对数函数减缓增长，并降低最大值
+    const logFactor = Math.log10(zoomLevel.value * 9 + 1) * 0.7; // 系数从0.8降低到0.7
+    nodeRadius = Math.min(1.5, baseNodeRadius * logFactor); // 最大值从3降低到1.5
+  }
+  
+  // 当缩放太小时（概览模式），不显示单个节点，只显示轮廓
+  if (zoomLevel.value < 0.3) {
+    // 绘制所有节点的轮廓，减小轮廓大小
+    ctx.fillStyle = 'rgba(51, 136, 255, 0.2)';  // 半透明蓝色
+    ctx.beginPath();
     for (const node of nodes.value) {
-      const x = transformX(node.x)
-      const y = transformY(node.y)
+      const x = transformX(node.x);
+      const y = transformY(node.y);
+      if (x >= viewMinX && x <= viewMaxX && y >= viewMinY && y <= viewMaxY) {
+        ctx.rect(x - 0.5, y - 0.5, 1, 1); // 从2x2减小到1x1
+      }
+    }
+    ctx.fill();
+  } else {
+    // 正常绘制各个节点
+    ctx.fillStyle = '#3388ff';
+    for (const node of nodes.value) {
+      const x = transformX(node.x);
+      const y = transformY(node.y);
       
       // 视口剔除
-      if (x + nodeRadius >= viewMinX && x - nodeRadius <= viewMaxX && y + nodeRadius >= viewMinY && y - nodeRadius <= viewMaxY) {
-        ctx.beginPath()
-        ctx.arc(x, y, nodeRadius, 0, Math.PI * 2)
-        ctx.fill()
+      if (x + nodeRadius >= viewMinX && x - nodeRadius <= viewMaxX && 
+          y + nodeRadius >= viewMinY && y - nodeRadius <= viewMaxY) {
+        ctx.beginPath();
+        ctx.arc(x, y, nodeRadius, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }
