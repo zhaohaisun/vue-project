@@ -15,6 +15,7 @@ export const importNodes = async (csvFilePath) => {
     // 解析CSV
     const { data } = Papa.parse(csvText, { header: true })
     
+    console.log(`开始导入节点，总计 ${data.length} 条数据`)
     const createdNodes = []
     
     // 逐行处理数据
@@ -31,7 +32,10 @@ export const importNodes = async (csvFilePath) => {
       try {
         // 调用API创建节点
         const result = await nodeApi.createNode(nodeProperties)
-        console.log(`创建节点成功: ${row.Id}`)
+        // 只有每1000个节点才输出一次日志，减少控制台输出
+        if(createdNodes.length % 1000 === 0) {
+          console.log(`已创建 ${createdNodes.length} 个节点`)
+        }
         createdNodes.push(result.data)
       } catch (error) {
         console.error(`创建节点失败: ${row.Id}`, error)
@@ -60,6 +64,7 @@ export const importRelationships = async (csvFilePath) => {
     // 解析CSV
     const { data } = Papa.parse(csvText, { header: true })
     
+    console.log(`开始导入边，总计 ${data.length} 条数据`)
     const createdRelationships = []
     
     // 逐行处理数据
@@ -81,7 +86,10 @@ export const importRelationships = async (csvFilePath) => {
           row.Type || 'Directed',
           relationshipProperties
         )
-        console.log(`创建边成功: ${row.Source} -> ${row.Target}`)
+        // 只有每1000条边才输出一次日志，减少控制台输出
+        if(createdRelationships.length % 1000 === 0) {
+          console.log(`已创建 ${createdRelationships.length} 条边`)
+        }
         createdRelationships.push(result.data)
       } catch (error) {
         console.error(`创建边失败: ${row.Source} -> ${row.Target}`, error)

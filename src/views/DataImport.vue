@@ -58,19 +58,6 @@
           </el-card>
         </el-col>
       </el-row>
-      
-      <el-divider />
-      
-      <div class="log-section">
-        <h3>导入日志</h3>
-        <el-input
-          type="textarea"
-          v-model="logOutput"
-          :rows="10"
-          readonly
-          resize="none"
-        />
-      </div>
     </el-card>
   </div>
 </template>
@@ -87,54 +74,20 @@ const nodeLoading = ref(false)
 const edgeLoading = ref(false)
 const nodeResult = ref('')
 const edgeResult = ref('')
-const logOutput = ref('准备导入数据...\n')
-
-// 记录日志
-const logMessage = (message) => {
-  const timestamp = new Date().toLocaleTimeString()
-  logOutput.value += `[${timestamp}] ${message}\n`
-  // 自动滚动到底部
-  const textarea = document.querySelector('.log-section textarea')
-  if (textarea) {
-    setTimeout(() => {
-      textarea.scrollTop = textarea.scrollHeight
-    }, 0)
-  }
-}
 
 // 导入节点
 const importNodesData = async () => {
   try {
     nodeLoading.value = true
     nodeResult.value = ''
-    logMessage(`开始导入节点数据: ${nodeCsvPath.value}`)
-    
-    // 重定向console.log以捕获日志
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message) => {
-      originalConsoleLog(message)
-      logMessage(message)
-    }
-    
-    console.error = (message, error) => {
-      originalConsoleError(message, error)
-      logMessage(`错误: ${message} ${error ? error.message || JSON.stringify(error) : ''}`)
-    }
     
     // 执行导入
     const result = await importNodes(nodeCsvPath.value)
     nodeResult.value = `成功导入 ${result.length} 个节点`
     ElMessage.success(nodeResult.value)
-    
-    // 恢复console
-    console.log = originalConsoleLog
-    console.error = originalConsoleError
   } catch (error) {
     nodeResult.value = `导入失败: ${error.message}`
     ElMessage.error(nodeResult.value)
-    logMessage(`导入节点数据失败: ${error.message}`)
   } finally {
     nodeLoading.value = false
   }
@@ -145,43 +98,18 @@ const importRelationshipsData = async () => {
   try {
     edgeLoading.value = true
     edgeResult.value = ''
-    logMessage(`开始导入边数据: ${edgeCsvPath.value}`)
-    
-    // 重定向console.log以捕获日志
-    const originalConsoleLog = console.log
-    const originalConsoleError = console.error
-    
-    console.log = (message) => {
-      originalConsoleLog(message)
-      logMessage(message)
-    }
-    
-    console.error = (message, error) => {
-      originalConsoleError(message, error)
-      logMessage(`错误: ${message} ${error ? error.message || JSON.stringify(error) : ''}`)
-    }
     
     // 执行导入
     const result = await importRelationships(edgeCsvPath.value)
     edgeResult.value = `成功导入 ${result.length} 条边`
     ElMessage.success(edgeResult.value)
-    
-    // 恢复console
-    console.log = originalConsoleLog
-    console.error = originalConsoleError
   } catch (error) {
     edgeResult.value = `导入失败: ${error.message}`
     ElMessage.error(edgeResult.value)
-    logMessage(`导入边数据失败: ${error.message}`)
   } finally {
     edgeLoading.value = false
   }
 }
-
-// 页面加载时设置默认路径
-onMounted(() => {
-  logMessage('页面已加载，请选择数据文件路径并开始导入')
-})
 </script>
 
 <style scoped>
@@ -209,15 +137,5 @@ onMounted(() => {
   padding: 10px;
   background-color: #f5f7fa;
   border-radius: 4px;
-}
-
-.log-section {
-  margin-top: 20px;
-}
-
-.log-section textarea {
-  font-family: monospace;
-  font-size: 14px;
-  background-color: #f5f7fa;
 }
 </style> 
