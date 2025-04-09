@@ -26,10 +26,6 @@
             <el-icon><Link /></el-icon>
             <span>关系管理</span>
           </el-menu-item>
-          <el-menu-item index="/dashboard/import">
-            <el-icon><Upload /></el-icon>
-            <span>数据导入</span>
-          </el-menu-item>
           <el-menu-item index="/dashboard/database">
             <el-icon><DataAnalysis /></el-icon>
             <span>数据库管理</span>
@@ -41,6 +37,10 @@
           <el-menu-item index="/dashboard/map">
             <el-icon><Location /></el-icon>
             <span>地图可视化</span>
+          </el-menu-item>
+          <el-menu-item index="/dashboard/import">
+            <el-icon><Upload /></el-icon>
+            <span>数据导入</span>
           </el-menu-item>
         </el-menu>
       </el-aside>
@@ -134,10 +134,10 @@ const currentRoute = computed(() => {
   if (path.includes('graph')) return '图谱视图'
   if (path.includes('nodes')) return '节点管理'
   if (path.includes('relationships')) return '关系管理'
-  if (path.includes('import')) return '数据导入'
   if (path.includes('database')) return '数据库管理'
   if (path.includes('system')) return '系统信息'
   if (path.includes('map')) return '地图可视化'
+  if (path.includes('import')) return '数据导入'
   return '首页'
 })
 
