@@ -112,49 +112,23 @@ const loadGraphData = async () => {
     const typesRes = await relationshipApi.getRelationshipTypes()
     relationshipTypes.value = typesRes.data || []
     
-    // 获取所有标签的节点和关系计数
-    let totalNodes = 0
-    let totalRelationships = 0
-    
-    for (const label of availableLabels.value) {
-      try {
-        const nodesRes = await nodeApi.getNodesByLabel(label)
-        const labelNodes = nodesRes.data || []
-        totalNodes += labelNodes.length
-      } catch (error) {
-        console.error(`获取标签 ${label} 的节点失败:`, error)
-      }
+    // 获取节点总数
+    try {
+      const nodesCountRes = await nodeApi.getNodesCount()
+      stats.nodeCount = parseInt(nodesCountRes.data) || 0
+    } catch (error) {
+      console.error('获取节点总数失败:', error)
+      stats.nodeCount = 0
     }
     
-    // 更新统计信息
-    stats.nodeCount = totalNodes
-    
-    // 获取关系总数 (可能需要另一个API调用)
+    // 获取关系总数
     try {
-      // 假设这里有一个获取关系总数的API
-      // const relsCountRes = await relationshipApi.getRelationshipsCount()
-      // totalRelationships = relsCountRes.data || 0
-      
-      // 临时解决方案：根据每个标签的节点获取关系
-      for (const label of availableLabels.value) {
-        const nodesRes = await nodeApi.getNodesByLabel(label)
-        const labelNodes = nodesRes.data || []
-        
-        for (const node of labelNodes) {
-          const nodeId = node.self.split('/').pop()
-          const relsRes = await relationshipApi.getAllRelationships(nodeId)
-          const relationships = relsRes.data || []
-          totalRelationships += relationships.length
-        }
-      }
-      
-      // 由于关系会被重复计算，可能需要除以2
-      totalRelationships = Math.floor(totalRelationships / 2)
+      const relsCountRes = await relationshipApi.getRelationshipsCount()
+      stats.relationshipCount = parseInt(relsCountRes.data) || 0
     } catch (error) {
       console.error('获取关系总数失败:', error)
+      stats.relationshipCount = 0
     }
-    
-    stats.relationshipCount = totalRelationships
     
     ElMessage.success('数据统计刷新成功')
   } catch (error) {

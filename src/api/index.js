@@ -81,6 +81,11 @@ export const nodeApi = {
     return apiClient.post('/db/data/node', properties)
   },
   
+  // 获取节点总数
+  getNodesCount() {
+    return apiClient.get('/db/data/nodes/count')
+  },
+  
   // 获取节点
   getNode(id) {
     return apiClient.get(`/db/data/node/${id}`)
@@ -169,6 +174,11 @@ export const relationshipApi = {
     
     // 发送请求创建关系
     return apiClient.post(`/db/data/node/${sourceNodeId}/relationships`, relationshipData)
+  },
+  
+  // 获取关系总数
+  getRelationshipsCount() {
+    return apiClient.get('/db/data/relationships/count')
   },
   
   // 获取关系
