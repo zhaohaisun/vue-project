@@ -4,23 +4,78 @@ import Papa from 'papaparse'
 // 全局变量，用于存储节点ID到序号的映射
 let nodeIdMap = {}
 
+// localStorage 中存储映射的键名
+const NODE_ID_MAP_KEY = 'graph_node_id_map'
+
+/**
+ * 保存节点ID映射到localStorage
+ */
+const saveNodeIdMapToStorage = () => {
+  try {
+    localStorage.setItem(NODE_ID_MAP_KEY, JSON.stringify(nodeIdMap))
+    console.log('节点ID映射已保存到本地存储')
+  } catch (error) {
+    console.error('保存节点ID映射失败', error)
+  }
+}
+
+/**
+ * 从localStorage加载节点ID映射
+ */
+const loadNodeIdMapFromStorage = () => {
+  try {
+    const savedMap = localStorage.getItem(NODE_ID_MAP_KEY)
+    if (savedMap) {
+      nodeIdMap = JSON.parse(savedMap)
+      console.log('从本地存储加载了节点ID映射')
+      return true
+    }
+  } catch (error) {
+    console.error('加载节点ID映射失败', error)
+  }
+  return false
+}
+
+/**
+ * 清除localStorage中的节点ID映射
+ */
+export const clearNodeIdMap = () => {
+  try {
+    localStorage.removeItem(NODE_ID_MAP_KEY)
+    nodeIdMap = {}
+    console.log('节点ID映射已清除')
+  } catch (error) {
+    console.error('清除节点ID映射失败', error)
+  }
+}
+
 /**
  * 获取节点ID映射
  * @returns {Object} 节点ID到创建序号的映射
  */
 export const getNodeIdMap = () => {
+  // 如果映射为空，尝试从localStorage加载
+  if (Object.keys(nodeIdMap).length === 0) {
+    loadNodeIdMapFromStorage()
+  }
   return nodeIdMap
 }
 
 /**
  * 导入节点数据
  * @param {string} csvFilePath - CSV文件路径
+ * @param {boolean} resetMap - 是否重置现有的节点映射
  * @returns {Promise<number>} - 创建的节点数量
  */
-export const importNodes = async (csvFilePath) => {
+export const importNodes = async (csvFilePath, resetMap = true) => {
   try {
-    // 清空节点映射
-    nodeIdMap = {}
+    // 如果resetMap为true，则清空节点映射
+    // 否则尝试从localStorage加载已有的映射
+    if (resetMap) {
+      nodeIdMap = {}
+    } else if (Object.keys(nodeIdMap).length === 0) {
+      loadNodeIdMapFromStorage()
+    }
     
     // 获取CSV文件
     const response = await fetch(csvFilePath)
@@ -59,6 +114,9 @@ export const importNodes = async (csvFilePath) => {
       }
     }
     
+    // 保存映射到localStorage
+    saveNodeIdMapToStorage()
+    
     console.log(`导入完成! 成功创建 ${successCount} 个节点`)
     return successCount
   } catch (error) {
@@ -74,6 +132,15 @@ export const importNodes = async (csvFilePath) => {
  */
 export const importRelationships = async (csvFilePath) => {
   try {
+    // 如果映射为空，尝试从localStorage加载
+    if (Object.keys(nodeIdMap).length === 0) {
+      const loaded = loadNodeIdMapFromStorage()
+      if (!loaded) {
+        console.error('节点ID映射为空，请先导入节点数据')
+        return 0
+      }
+    }
+    
     // 获取CSV文件
     const response = await fetch(csvFilePath)
     const csvText = await response.text()
@@ -100,6 +167,14 @@ export const importRelationships = async (csvFilePath) => {
       }
       
       try {
+        // 检查节点是否存在
+        if (sourceNodeId === undefined || targetNodeId === undefined) {
+          console.warn(`创建边 ${row.Id} 时发现节点映射缺失:`, 
+            sourceNodeId === undefined ? `源节点 ${row.Source} 不在映射中` : '',
+            targetNodeId === undefined ? `目标节点 ${row.Target} 不在映射中` : '')
+          continue // 如果节点不存在，跳过此边的创建
+        }
+        
         // 调用API创建边，使用节点ID而不是布尔值
         await relationshipApi.createRelationship(
           sourceNodeId, 
