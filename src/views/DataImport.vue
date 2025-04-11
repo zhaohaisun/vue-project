@@ -83,7 +83,7 @@ const importNodesData = async () => {
     
     // 执行导入
     const result = await importNodes(nodeCsvPath.value)
-    nodeResult.value = `成功导入 ${result.length} 个节点`
+    nodeResult.value = `成功导入 ${result} 个节点`
     ElMessage.success(nodeResult.value)
   } catch (error) {
     nodeResult.value = `导入失败: ${error.message}`
@@ -101,7 +101,7 @@ const importRelationshipsData = async () => {
     
     // 执行导入
     const result = await importRelationships(edgeCsvPath.value)
-    edgeResult.value = `成功导入 ${result.length} 条边`
+    edgeResult.value = `成功导入 ${result} 条边`
     ElMessage.success(edgeResult.value)
   } catch (error) {
     edgeResult.value = `导入失败: ${error.message}`
