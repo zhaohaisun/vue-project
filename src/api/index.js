@@ -86,6 +86,16 @@ export const nodeApi = {
     return apiClient.get('/db/data/nodes/count')
   },
   
+  // 获取所有节点
+  getAllNodes() {
+    return apiClient.get('/db/data/nodes')
+  },
+  
+  // 获取分页节点数据
+  getNodesPaginated(page = 1, size = 50) {
+    return apiClient.get(`/db/data/nodes/paginated?page=${page}&size=${size}`)
+  },
+  
   // 获取节点
   getNode(id) {
     return apiClient.get(`/db/data/node/${id}`)

@@ -115,9 +115,9 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="[50, 100, 200]"
           layout="total, sizes, prev, pager, next, jumper"
-          :total="filteredNodes.length"
+          :total="totalNodes"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
@@ -192,15 +192,14 @@ import { Refresh, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi, labelApi } from '../api'
 
-// 数据加载状态
-const loading = ref(false)
-const submitLoading = ref(false)
-
 // 表格数据和过滤
 const nodes = ref([])
 const availableLabels = ref([])
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(50)
+const totalNodes = ref(0)
+const loading = ref(false)
+const submitLoading = ref(false)
 
 // 搜索表单
 const searchForm = reactive({
@@ -241,49 +240,18 @@ const rules = {
 const fetchNodes = async () => {
   loading.value = true
   try {
-    // 获取所有标签
+    // 获取所有标签（用于过滤和创建节点表单）
     const labelsRes = await labelApi.getAllLabels()
     availableLabels.value = labelsRes.data || []
     
-    // 获取所有标签的节点
-    const nodeData = []
-    let nodeMap = new Map()
+    // 获取节点总数
+    const countRes = await nodeApi.getNodesCount()
+    totalNodes.value = parseInt(countRes.data) || 0
     
-    for (const label of availableLabels.value) {
-      const nodesRes = await nodeApi.getNodesByLabel(label)
-      const labelNodes = nodesRes.data || []
-      
-      for (const node of labelNodes) {
-        // 提取节点ID
-        const nodeId = node.self.split('/').pop()
-        
-        // 如果节点已存在于map中，则合并标签
-        if (nodeMap.has(nodeId)) {
-          const existingNode = nodeMap.get(nodeId)
-          existingNode.labels = [...new Set([...existingNode.labels, label])]
-        } else {
-          // 获取节点属性
-          const propsRes = await nodeApi.getNodeProperties(nodeId)
-          
-          // 获取节点度数
-          const degreeRes = await nodeApi.getNodeDegree(nodeId)
-          
-          // 创建新节点
-          const newNode = {
-            id: nodeId,
-            labels: [label],
-            properties: propsRes.data || {},
-            degree: degreeRes.data || 0,
-            self: node.self
-          }
-          
-          nodeMap.set(nodeId, newNode)
-        }
-      }
-    }
+    // 使用分页API获取节点数据
+    const nodesRes = await nodeApi.getNodesPaginated(currentPage.value, pageSize.value)
+    nodes.value = nodesRes.data || []
     
-    // 将Map转换为数组
-    nodes.value = Array.from(nodeMap.values())
   } catch (error) {
     console.error('获取节点数据失败:', error)
     ElMessage.error('获取节点数据失败，请检查后端服务是否正常运行')
@@ -293,13 +261,15 @@ const fetchNodes = async () => {
 }
 
 // 分页处理
-const handleSizeChange = (val) => {
+const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1
+  await fetchNodes()
 }
 
-const handleCurrentChange = (val) => {
+const handleCurrentChange = async (val) => {
   currentPage.value = val
+  await fetchNodes()
 }
 
 // 标签过滤
