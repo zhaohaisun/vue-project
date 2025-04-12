@@ -137,9 +137,9 @@
         <el-pagination
           v-model:current-page="currentPage"
           v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
+          :page-sizes="[50, 100, 200]"
           layout="total, sizes, prev, pager, next, jumper"
-          :total="filteredRelationships.length"
+          :total="totalRelationships"
           @size-change="handleSizeChange"
           @current-change="handleCurrentChange"
         />
@@ -260,7 +260,8 @@ const relationships = ref([])
 const nodes = ref([])
 const relationshipTypes = ref([])
 const currentPage = ref(1)
-const pageSize = ref(10)
+const pageSize = ref(50)
+const totalRelationships = ref(0)
 
 // 搜索表单
 const searchForm = reactive({
@@ -335,53 +336,62 @@ const getNodeLabel = (node) => {
 const fetchRelationships = async () => {
   loading.value = true
   try {
-    // 首先获取所有节点以便后续关联
-    await fetchNodes()
-    
     // 获取关系类型
     const typesRes = await relationshipApi.getRelationshipTypes()
     relationshipTypes.value = typesRes.data || []
     
-    // 通过遍历所有节点来获取所有关系
-    const relationshipsData = []
-    const processedRelationships = new Set()
+    // 获取关系总数
+    const countRes = await relationshipApi.getRelationshipsCount()
+    totalRelationships.value = parseInt(countRes.data) || 0
     
-    for (const node of nodes.value) {
-      // 获取节点的关系
-      const relsRes = await relationshipApi.getAllRelationships(node.id)
-      const nodeRelationships = relsRes.data || []
+    // 使用分页API获取关系数据
+    const relsRes = await relationshipApi.getRelationshipsPaginated(currentPage.value, pageSize.value)
+    const rawRelationships = relsRes.data || []
+    
+    // 处理关系数据格式，提取节点ID和准备查询节点标签
+    const processedRelationships = []
+    const nodeIds = new Set()
+    
+    for (const rel of rawRelationships) {
+      // 从URL中提取节点ID
+      const sourceId = rel.start.split('/').pop()
+      const targetId = rel.end.split('/').pop()
+      const relId = rel.self.split('/').pop()
       
-      for (const rel of nodeRelationships) {
-        const relId = rel.self.split('/').pop()
+      // 记录需要查询的节点ID
+      nodeIds.add(sourceId)
+      nodeIds.add(targetId)
+      
+      // 构建关系对象
+      processedRelationships.push({
+        id: relId,
+        type: rel.type,
+        sourceId: sourceId,
+        targetId: targetId,
+        sourceLabels: [], // 暂时为空，后续会填充
+        targetLabels: [], // 暂时为空，后续会填充
+        properties: rel.data || {},
+        self: rel.self
+      })
+    }
+    
+    // 如果有关系数据，查询相关节点的标签信息
+    if (processedRelationships.length > 0) {
+      // 获取节点数据以获取标签信息
+      await fetchNodesForSelection()
+      
+      // 填充节点标签信息
+      for (const rel of processedRelationships) {
+        const sourceNode = nodes.value.find(node => node.id === rel.sourceId)
+        const targetNode = nodes.value.find(node => node.id === rel.targetId)
         
-        // 避免重复处理同一关系
-        if (processedRelationships.has(relId)) continue
-        processedRelationships.add(relId)
-        
-        const sourceId = rel.start.split('/').pop()
-        const targetId = rel.end.split('/').pop()
-        
-        // 获取关系属性
-        const relPropsRes = await relationshipApi.getRelationshipProperties(relId)
-        
-        // 查找源节点和目标节点信息
-        const sourceNode = nodes.value.find(node => node.id === sourceId)
-        const targetNode = nodes.value.find(node => node.id === targetId)
-        
-        relationshipsData.push({
-          id: relId,
-          type: rel.type,
-          sourceId: sourceId,
-          targetId: targetId,
-          sourceLabels: sourceNode?.labels || [],
-          targetLabels: targetNode?.labels || [],
-          properties: relPropsRes.data || {},
-          self: rel.self
-        })
+        rel.sourceLabels = sourceNode?.labels || []
+        rel.targetLabels = targetNode?.labels || []
       }
     }
     
-    relationships.value = relationshipsData
+    relationships.value = processedRelationships
+    
   } catch (error) {
     console.error('获取关系数据失败:', error)
     ElMessage.error('获取关系数据失败，请检查后端服务是否正常运行')
@@ -390,48 +400,14 @@ const fetchRelationships = async () => {
   }
 }
 
-// 获取所有节点
-const fetchNodes = async () => {
+// 仅在需要创建关系时获取节点列表
+const fetchNodesForSelection = async () => {
+  if (nodes.value.length > 0) return // 如果已经有节点数据，不再重新获取
+  
   try {
-    // 获取所有标签
-    const labelsRes = await nodeApi.getAllLabels()
-    const availableLabels = labelsRes.data || []
-    
-    // 获取所有标签的节点
-    const nodeData = []
-    let nodeMap = new Map()
-    
-    for (const label of availableLabels) {
-      const nodesRes = await nodeApi.getNodesByLabel(label)
-      const labelNodes = nodesRes.data || []
-      
-      for (const node of labelNodes) {
-        // 提取节点ID
-        const nodeId = node.self.split('/').pop()
-        
-        // 如果节点已存在于map中，则合并标签
-        if (nodeMap.has(nodeId)) {
-          const existingNode = nodeMap.get(nodeId)
-          existingNode.labels = [...new Set([...existingNode.labels, label])]
-        } else {
-          // 获取节点属性
-          const propsRes = await nodeApi.getNodeProperties(nodeId)
-          
-          // 创建新节点
-          const newNode = {
-            id: nodeId,
-            labels: [label],
-            properties: propsRes.data || {},
-            self: node.self
-          }
-          
-          nodeMap.set(nodeId, newNode)
-        }
-      }
-    }
-    
-    // 将Map转换为数组
-    nodes.value = Array.from(nodeMap.values())
+    // 使用分页API获取节点数据
+    const nodesRes = await nodeApi.getNodesPaginated(1, 1000) // 获取前1000个节点用于选择
+    nodes.value = nodesRes.data || []
   } catch (error) {
     console.error('获取节点数据失败:', error)
     ElMessage.error('获取节点数据失败，请检查后端服务是否正常运行')
@@ -439,13 +415,15 @@ const fetchNodes = async () => {
 }
 
 // 分页处理
-const handleSizeChange = (val) => {
+const handleSizeChange = async (val) => {
   pageSize.value = val
   currentPage.value = 1
+  await fetchRelationships()
 }
 
-const handleCurrentChange = (val) => {
+const handleCurrentChange = async (val) => {
   currentPage.value = val
+  await fetchRelationships()
 }
 
 // 关系类型过滤
@@ -454,7 +432,10 @@ const handleTypeChange = () => {
 }
 
 // 添加关系对话框
-const openAddDialog = () => {
+const openAddDialog = async () => {
+  // 获取节点列表用于选择
+  await fetchNodesForSelection()
+  
   isEdit.value = false
   dialogVisible.value = true
   currentRelation.value = null

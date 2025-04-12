@@ -191,6 +191,11 @@ export const relationshipApi = {
     return apiClient.get('/db/data/relationships/count')
   },
   
+  // 获取分页关系数据
+  getRelationshipsPaginated(page = 1, size = 50) {
+    return apiClient.get(`/db/data/relationships/paginated?page=${page}&size=${size}`)
+  },
+  
   // 获取关系
   getRelationship(id) {
     return apiClient.get(`/db/data/relationship/${id}`)
