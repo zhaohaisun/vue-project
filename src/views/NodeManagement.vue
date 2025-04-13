@@ -231,9 +231,10 @@ const nodeForm = reactive({
 
 // 表单验证规则
 const rules = {
-  labels: [
-    { required: true, message: '请至少选择一个标签', trigger: 'change' }
-  ]
+  // 标签不再是必填项
+  // labels: [
+  //   { required: true, message: '请至少选择一个标签', trigger: 'change' }
+  // ]
 }
 
 // 获取所有节点数据
