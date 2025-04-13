@@ -26,7 +26,7 @@
               <el-card shadow="hover">
                 <template #header>
                   <div class="card-header">
-                    <el-icon><CpuIcon /></el-icon>
+                    <el-icon><Monitor /></el-icon>
                     <span>CPU使用率</span>
                   </div>
                 </template>
@@ -140,7 +140,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { Refresh, CpuIcon, Cloudy, SwitchButton, FolderOpened } from '@element-plus/icons-vue'
+import { Refresh, Monitor, Cloudy, SwitchButton, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { systemApi } from '../api'
 import * as echarts from 'https://cdn.jsdelivr.net/npm/echarts@5/+esm'
