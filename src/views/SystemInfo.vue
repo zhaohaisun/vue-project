@@ -67,7 +67,7 @@
           </el-row>
           
           <el-row :gutter="20" class="details-row">
-            <el-col :span="12">
+            <el-col :span="8">
               <el-card shadow="hover" class="detail-card">
                 <template #header>
                   <div class="card-header">
@@ -84,35 +84,50 @@
                   <el-descriptions-item label="空闲内存">
                     {{ formatMemorySize(memoryDetails.free) }}
                   </el-descriptions-item>
-                  <el-descriptions-item label="堆内存">
-                    {{ formatMemorySize(memoryDetails.heap) }}
-                  </el-descriptions-item>
-                  <el-descriptions-item label="非堆内存">
-                    {{ formatMemorySize(memoryDetails.nonHeap) }}
-                  </el-descriptions-item>
                 </el-descriptions>
               </el-card>
             </el-col>
-            <el-col :span="12">
+            <el-col :span="8">
               <el-card shadow="hover" class="detail-card">
                 <template #header>
                   <div class="card-header">
-                    <span>线程详情</span>
+                    <span>线程状态</span>
                   </div>
                 </template>
                 <el-table 
                   :data="threadDetails" 
                   style="width: 100%" 
-                  height="270px"
+                  height="216px"
                   :header-cell-style="{ background: '#f5f7fa' }"
                 >
-                  <el-table-column prop="name" label="线程名" />
-                  <el-table-column prop="state" label="状态">
+                  <el-table-column prop="name" label="线程状态" />
+                  <el-table-column prop="count" label="数量">
                     <template #default="scope">
-                      <el-tag :type="getStateType(scope.row.state)">{{ scope.row.state }}</el-tag>
+                      <el-tag :type="getStateType(scope.row.state)">{{ scope.row.count }}</el-tag>
                     </template>
                   </el-table-column>
-                  <el-table-column prop="cpuTime" label="CPU时间" />
+                </el-table>
+              </el-card>
+            </el-col>
+            <el-col :span="8">
+              <el-card shadow="hover" class="detail-card">
+                <template #header>
+                  <div class="card-header">
+                    <el-icon><FolderOpened /></el-icon>
+                    <span>数据库空间 ({{ currentDatabase }})</span>
+                  </div>
+                </template>
+                <p v-if="dbPath" class="db-path">
+                  <span class="label">路径:</span> {{ dbPath }}
+                </p>
+                <el-table 
+                  :data="dbSpaceDetails" 
+                  style="width: 100%" 
+                  height="180px"
+                  :header-cell-style="{ background: '#f5f7fa' }"
+                >
+                  <el-table-column prop="name" label="数据类型" />
+                  <el-table-column prop="size" label="大小" />
                 </el-table>
               </el-card>
             </el-col>
@@ -125,7 +140,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { Refresh, CpuIcon, Cloudy, SwitchButton } from '@element-plus/icons-vue'
+import { Refresh, CpuIcon, Cloudy, SwitchButton, FolderOpened } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { systemApi } from '../api'
 import * as echarts from 'https://cdn.jsdelivr.net/npm/echarts@5/+esm'
@@ -147,6 +162,13 @@ let cpuChartInstance = null
 let memoryChartInstance = null
 let threadChartInstance = null
 
+// 当前数据库
+const currentDatabase = ref(localStorage.getItem('currentDatabase') || 'test')
+
+// 数据库空间详情
+const dbSpaceDetails = ref([])
+const dbPath = ref('')
+
 // 详细信息
 const memoryDetails = reactive({
   total: 0,
@@ -165,30 +187,64 @@ const fetchSystemInfo = async () => {
     const resourcesRes = await systemApi.getSystemResources()
     const resources = resourcesRes.data || {}
     
+    // 根据后端API返回格式解析数据
+    // 内存信息
+    const usedMemory = parseMemorySize(resources.usedMemory || '0 MB')
+    const totalMemory = parseMemorySize(resources.totalMemory || '0 MB')
+    const freeMemory = parseMemorySize(resources.freeMemory || '0 MB')
+    
+    // 计算内存使用百分比
+    const memPercent = totalMemory > 0 ? (usedMemory / totalMemory * 100) : 0
+    
     // 更新CPU使用率
-    cpuUsage.value = resources.cpu?.usage || 0
+    cpuUsage.value = parseFloat(resources.processCpuLoad?.replace('%', '') || resources.systemCpuLoad?.replace('%', '') || 0)
     
     // 更新内存使用率和详情
-    memoryUsage.value = resources.memory?.usagePercent || 0
-    memoryDetails.total = resources.memory?.total || 0
-    memoryDetails.used = resources.memory?.used || 0
-    memoryDetails.free = resources.memory?.free || 0
-    memoryDetails.heap = resources.memory?.heap || 0
-    memoryDetails.nonHeap = resources.memory?.nonHeap || 0
+    memoryUsage.value = memPercent.toFixed(2)
+    memoryDetails.total = totalMemory
+    memoryDetails.used = usedMemory
+    memoryDetails.free = freeMemory
     
     // 获取线程信息
     const threadsRes = await systemApi.getSystemThreads()
     const threads = threadsRes.data || {}
     
-    // 更新线程数
-    threadCount.value = threads.count || 0
+    // 更新线程数和状态
+    threadCount.value = threads.qtpThreadCount || 0
     
     // 更新线程详情
-    threadDetails.value = (threads.details || []).map(thread => ({
-      name: thread.name,
-      state: thread.state,
-      cpuTime: formatCpuTime(thread.cpuTime)
-    }))
+    const threadStatesList = []
+    if (threads.qtpThreadStates) {
+      Object.entries(threads.qtpThreadStates).forEach(([state, count]) => {
+        threadStatesList.push({
+          name: `${state} 线程`,
+          state: state,
+          count: count
+        })
+      })
+    }
+    threadDetails.value = threadStatesList
+    
+    // 如果有选定的数据库，获取数据库空间信息
+    if (currentDatabase.value) {
+      try {
+        const spaceRes = await systemApi.getDatabaseSpace(currentDatabase.value)
+        const spaceData = spaceRes.data || {}
+        
+        if (spaceData.space_statistics) {
+          dbSpaceDetails.value = Object.entries(spaceData.space_statistics).map(([key, value]) => ({
+            name: formatDbSpaceName(key),
+            size: value
+          }))
+        }
+        
+        if (spaceData.db_path) {
+          dbPath.value = spaceData.db_path
+        }
+      } catch (error) {
+        console.error('获取数据库空间信息失败:', error)
+      }
+    }
     
     // 更新图表
     updateCharts()
@@ -196,6 +252,28 @@ const fetchSystemInfo = async () => {
     console.error('获取系统信息失败:', error)
     ElMessage.error('获取系统信息失败')
   }
+}
+
+// 解析内存大小字符串，返回字节数
+const parseMemorySize = (sizeStr) => {
+  if (!sizeStr) return 0
+  
+  const regex = /(\d+\.?\d*)\s*([KMGT]?B)/i
+  const match = sizeStr.match(regex)
+  
+  if (!match) return 0
+  
+  const size = parseFloat(match[1])
+  const unit = match[2].toUpperCase()
+  
+  const units = { 'B': 1, 'KB': 1024, 'MB': 1024 * 1024, 'GB': 1024 * 1024 * 1024, 'TB': 1024 * 1024 * 1024 * 1024 }
+  
+  return size * (units[unit] || 1)
+}
+
+// 格式化数据库空间名称
+const formatDbSpaceName = (key) => {
+  return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
 // 更新图表
@@ -593,5 +671,18 @@ onUnmounted(() => {
 
 .detail-card {
   height: 100%;
+}
+
+.db-path {
+  padding: 0 8px;
+  margin-bottom: 8px;
+  color: #666;
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.db-path .label {
+  font-weight: bold;
+  color: #333;
 }
 </style> 

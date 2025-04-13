@@ -310,14 +310,19 @@ export const databaseApi = {
 
 // 系统信息API
 export const systemApi = {
-  // 获取CPU和内存占用
+  // 获取系统资源信息（CPU和内存使用情况）
   getSystemResources() {
     return apiClient.get('/system/resources')
   },
   
-  // 获取线程数
+  // 获取线程信息
   getSystemThreads() {
     return apiClient.get('/system/threads')
+  },
+  
+  // 获取数据库空间使用情况
+  getDatabaseSpace(dbName) {
+    return apiClient.get(`/databases/${dbName}/space`)
   }
 }
 

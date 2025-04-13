@@ -1,7 +1,7 @@
 <template>
   <div class="database-management">
-    <el-row :gutter="20">
-      <el-col :span="12">
+    <el-row>
+      <el-col :span="24">
         <el-card class="db-card">
           <template #header>
             <div class="card-header">
@@ -32,10 +32,26 @@
               <el-descriptions-item label="数据文件位置">
                 {{ databaseInfo.path || '获取中...' }}
               </el-descriptions-item>
-              <el-descriptions-item label="数据文件大小">
-                {{ formatFileSize(databaseInfo.size) }}
-              </el-descriptions-item>
             </el-descriptions>
+            
+            <!-- 数据库文件大小详情 -->
+            <div class="space-details">
+              <h4>数据库文件大小详情</h4>
+              <el-table 
+                :data="spaceDetails" 
+                style="width: 100%" 
+                size="small" 
+                border 
+                stripe
+                :header-cell-style="{ backgroundColor: '#f5f7fa' }"
+              >
+                <el-table-column prop="name" label="数据类型" width="180" />
+                <el-table-column prop="size" label="大小" />
+              </el-table>
+              <div class="total-size">
+                <span>总大小: <strong>{{ calculateTotalSize() }}</strong></span>
+              </div>
+            </div>
             
             <div class="db-actions">
               <el-button 
@@ -66,135 +82,60 @@
           </div>
         </el-card>
       </el-col>
-      
-      <el-col :span="12">
-        <el-card class="users-card">
-          <template #header>
-            <div class="card-header">
-              <span>用户管理</span>
-              <div>
-                <el-tooltip content="刷新" placement="top">
-                  <el-button :icon="Refresh" circle @click="fetchUsers" />
-                </el-tooltip>
-              </div>
-            </div>
-          </template>
-          
-          <div class="users-container">
-            <el-table
-              v-loading="usersLoading"
-              :data="users"
-              style="width: 100%"
-              height="250px"
-            >
-              <el-table-column prop="username" label="用户名" />
-              <el-table-column prop="role" label="角色" />
-              <el-table-column prop="status" label="状态">
-                <template #default="scope">
-                  <el-tag :type="scope.row.status === 'active' ? 'success' : 'danger'">
-                    {{ scope.row.status === 'active' ? '在线' : '离线' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="操作" width="200">
-                <template #default="scope">
-                  <el-button 
-                    type="primary" 
-                    size="small" 
-                    @click="openChangePasswordDialog(scope.row)"
-                    :icon="Edit"
-                  >
-                    修改密码
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-            
-            <div class="logs-viewer">
-              <h3>用户操作日志</h3>
-              <el-scrollbar height="200px">
-                <div v-if="logs.length > 0" class="logs-content">
-                  <div v-for="(log, index) in logs" :key="index" class="log-item">
-                    <div class="log-time">{{ formatTime(log.time) }}</div>
-                    <div class="log-user">{{ log.user }}</div>
-                    <div class="log-action">{{ log.action }}</div>
-                  </div>
-                </div>
-                <div v-else class="no-logs">
-                  暂无日志记录
-                </div>
-              </el-scrollbar>
-            </div>
-          </div>
-        </el-card>
-      </el-col>
     </el-row>
-    
-    <!-- 修改密码对话框 -->
-    <el-dialog
-      v-model="passwordDialogVisible"
-      title="修改用户密码"
-      width="400px"
-    >
-      <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="120px">
-        <el-form-item label="用户名">
-          <el-input v-model="passwordForm.username" disabled />
-        </el-form-item>
-        <el-form-item label="新密码" prop="password">
-          <el-input v-model="passwordForm.password" type="password" show-password />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button @click="passwordDialogVisible = false">取消</el-button>
-          <el-button type="primary" @click="changePassword" :loading="changePasswordLoading">
-            确认
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { Refresh, Edit } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { databaseApi, userApi } from '../api'
+import { databaseApi } from '../api'
 
 // 数据加载状态
 const startLoading = ref(false)
 const stopLoading = ref(false)
 const backupLoading = ref(false)
-const usersLoading = ref(false)
-const changePasswordLoading = ref(false)
+
+// 监听当前数据库的变化
+const currentDatabase = ref(localStorage.getItem('currentDatabase') || 'test')
+
+// 数据库文件大小详情
+const spaceDetails = ref([])
 
 // 数据库信息
 const databaseInfo = reactive({
-  name: 'neo4j-hello-db',
+  name: currentDatabase.value,
   status: null,
   path: '',
   size: 0
 })
 
-// 用户列表和日志
-const users = ref([])
-const logs = ref([])
+// 创建一个函数来检查localStorage变化
+const checkDatabaseChange = () => {
+  const storedDb = localStorage.getItem('currentDatabase')
+  if (storedDb !== currentDatabase.value) {
+    currentDatabase.value = storedDb || 'test'
+    databaseInfo.name = currentDatabase.value
+    fetchDatabaseInfo()
+  }
+}
 
-// 修改密码对话框
-const passwordDialogVisible = ref(false)
-const passwordFormRef = ref(null)
-const passwordForm = reactive({
-  username: '',
-  password: ''
+// 添加存储事件监听器，当其他标签页改变localStorage时触发更新
+window.addEventListener('storage', (e) => {
+  if (e.key === 'currentDatabase') {
+    checkDatabaseChange()
+  }
 })
 
-const passwordRules = {
-  password: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, message: '密码长度至少为 6 个字符', trigger: 'blur' }
-  ]
-}
+// 每次组件激活时检查数据库是否变化
+const checkInterval = setInterval(checkDatabaseChange, 2000)
+
+// 组件卸载时清除计时器和事件监听器
+onUnmounted(() => {
+  clearInterval(checkInterval)
+  window.removeEventListener('storage', checkDatabaseChange)
+})
 
 // 获取数据库信息
 const fetchDatabaseInfo = async () => {
@@ -210,10 +151,66 @@ const fetchDatabaseInfo = async () => {
     // 获取数据库大小
     const sizeRes = await databaseApi.getDatabaseSpace(databaseInfo.name)
     databaseInfo.size = sizeRes.data?.totalSize || 0
+    
+    // 获取数据库空间详细统计信息
+    if (sizeRes.data?.space_statistics) {
+      // 将对象转换为数组格式以便表格展示
+      spaceDetails.value = Object.entries(sizeRes.data.space_statistics).map(([key, value]) => {
+        return {
+          name: formatSpaceName(key),
+          size: value
+        }
+      })
+    } else {
+      spaceDetails.value = []
+    }
   } catch (error) {
     console.error('获取数据库信息失败:', error)
     ElMessage.error('获取数据库信息失败')
   }
+}
+
+// 格式化空间名称，将下划线分隔的名称转换为更易读的格式
+const formatSpaceName = (name) => {
+  return name.split('_').map(word => 
+    word.charAt(0).toUpperCase() + word.slice(1)
+  ).join(' ')
+}
+
+// 计算数据库总大小
+const calculateTotalSize = () => {
+  // 如果没有空间数据，返回0
+  if (!spaceDetails.value || spaceDetails.value.length === 0) {
+    return '0 B'
+  }
+  
+  // 遍历所有空间数据，尝试提取数值部分并累加
+  let totalBytes = 0
+  
+  spaceDetails.value.forEach(item => {
+    const sizeStr = item.size
+    if (typeof sizeStr === 'string') {
+      const matches = sizeStr.match(/^([\d.]+)\s*([KMGT]?B)$/i)
+      if (matches) {
+        const size = parseFloat(matches[1])
+        const unit = matches[2].toUpperCase()
+        
+        // 转换为字节
+        const unitMultipliers = {
+          'B': 1,
+          'KB': 1024,
+          'MB': 1024 * 1024,
+          'GB': 1024 * 1024 * 1024,
+          'TB': 1024 * 1024 * 1024 * 1024
+        }
+        
+        totalBytes += size * (unitMultipliers[unit] || 1)
+      }
+    }
+  })
+  
+  // 格式化总大小
+  return formatFileSize(totalBytes)
 }
 
 // 启动数据库
@@ -260,64 +257,6 @@ const backupDatabase = async () => {
   }
 }
 
-// 获取用户列表
-const fetchUsers = async () => {
-  usersLoading.value = true
-  try {
-    // 获取用户列表
-    const usersRes = await userApi.getUserList()
-    users.value = (usersRes.data || []).map(user => ({
-      username: user.username,
-      role: user.role || 'user',
-      status: user.status || 'inactive'
-    }))
-    
-    // 获取用户日志
-    const logsRes = await userApi.getUserLogs()
-    logs.value = (logsRes.data || []).map(log => ({
-      time: log.timestamp,
-      user: log.username,
-      action: log.action
-    }))
-  } catch (error) {
-    console.error('获取用户数据失败:', error)
-    ElMessage.error('获取用户数据失败')
-  } finally {
-    usersLoading.value = false
-  }
-}
-
-// 打开修改密码对话框
-const openChangePasswordDialog = (user) => {
-  passwordForm.username = user.username
-  passwordForm.password = ''
-  passwordDialogVisible.value = true
-}
-
-// 修改密码
-const changePassword = async () => {
-  if (!passwordFormRef.value) return
-  
-  try {
-    await passwordFormRef.value.validate()
-    changePasswordLoading.value = true
-    
-    const payload = {
-      password: passwordForm.password
-    }
-    
-    await userApi.changePassword(passwordForm.username, payload)
-    
-    ElMessage.success('密码修改成功')
-    passwordDialogVisible.value = false
-  } catch (error) {
-    console.error('密码修改失败:', error)
-    ElMessage.error('密码修改失败')
-  } finally {
-    changePasswordLoading.value = false
-  }
-}
-
 // 格式化文件大小
 const formatFileSize = (size) => {
   if (!size) return '0 B'
@@ -334,18 +273,9 @@ const formatFileSize = (size) => {
   return `${formattedSize.toFixed(2)} ${units[index]}`
 }
 
-// 格式化时间
-const formatTime = (timestamp) => {
-  if (!timestamp) return ''
-  
-  const date = new Date(timestamp)
-  return date.toLocaleString()
-}
-
 // 页面加载时获取数据
 onMounted(() => {
   fetchDatabaseInfo()
-  fetchUsers()
 })
 </script>
 
@@ -354,8 +284,7 @@ onMounted(() => {
   height: 100%;
 }
 
-.db-card,
-.users-card {
+.db-card {
   height: calc(100vh - 130px);
   display: flex;
   flex-direction: column;
@@ -367,8 +296,7 @@ onMounted(() => {
   justify-content: space-between;
 }
 
-.db-status-container,
-.users-container {
+.db-status-container {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -389,63 +317,33 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.space-details {
+  margin-bottom: 20px;
+}
+
+.space-details h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #606266;
+}
+
+.total-size {
+  margin-top: 10px;
+  text-align: right;
+  padding-right: 10px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.total-size strong {
+  color: #409EFF;
+  font-weight: bold;
+}
+
 .db-actions {
   display: flex;
   justify-content: space-between;
   margin-top: auto;
   padding-top: 20px;
-}
-
-.logs-viewer {
-  margin-top: 20px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.logs-viewer h3 {
-  margin-top: 0;
-  margin-bottom: 10px;
-}
-
-.logs-content {
-  padding: 0 10px;
-}
-
-.log-item {
-  display: flex;
-  padding: 8px 0;
-  border-bottom: 1px solid #eee;
-}
-
-.log-time {
-  width: 160px;
-  color: #999;
-  font-size: 14px;
-}
-
-.log-user {
-  width: 100px;
-  font-weight: bold;
-}
-
-.log-action {
-  flex: 1;
-}
-
-.no-logs {
-  padding: 20px;
-  text-align: center;
-  color: #999;
-  font-style: italic;
-}
-
-.relation-info {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 4px;
 }
 </style> 
