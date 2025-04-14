@@ -26,7 +26,7 @@
       
       <el-table v-else :data="databases" style="width: 100%">
         <el-table-column prop="name" label="数据库名称" />
-        <el-table-column label="操作" width="160">
+        <el-table-column label="操作" width="240">
           <template #default="scope">
             <el-button 
               type="primary"
@@ -35,6 +35,14 @@
               :loading="startingDb === scope.row.name"
             >
               启动
+            </el-button>
+            <el-button 
+              type="danger"
+              size="small"
+              @click="stopDatabase(scope.row.name)"
+              :loading="stoppingDb === scope.row.name"
+            >
+              停止
             </el-button>
             <el-button 
               type="success"
@@ -99,6 +107,7 @@ const router = useRouter()
 const databases = ref([])
 const loading = ref(true)
 const startingDb = ref('')
+const stoppingDb = ref('')
 
 // 备份相关
 const backupDialogVisible = ref(false)
@@ -140,6 +149,21 @@ const startDatabase = async (dbName) => {
     ElMessage.error(`启动数据库 ${dbName} 失败`)
   } finally {
     startingDb.value = ''
+  }
+}
+
+// 停止数据库
+const stopDatabase = async (dbName) => {
+  stoppingDb.value = dbName
+  try {
+    await databaseApi.stopDatabase()
+    ElMessage.success(`数据库 ${dbName} 已停止`)
+    refreshDatabases()
+  } catch (error) {
+    console.error('停止数据库失败:', error)
+    ElMessage.error(`停止数据库 ${dbName} 失败`)
+  } finally {
+    stoppingDb.value = ''
   }
 }
 
