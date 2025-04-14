@@ -292,6 +292,16 @@ export const databaseApi = {
     return apiClient.post(`/db/data/database/${dbName}/backup`)
   },
   
+  // 获取数据库备份列表
+  getBackupList() {
+    return apiClient.get('/db/data/database/backup')
+  },
+  
+  // 恢复数据库备份
+  restoreDatabase(backupFileName) {
+    return apiClient.post(`/db/data/database/${backupFileName}/restore`)
+  },
+  
   // 获取数据库状态
   getDatabaseStatus(dbName) {
     return apiClient.get(`/db/data/database/${dbName}/status`)

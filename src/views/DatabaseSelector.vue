@@ -4,10 +4,15 @@
       <template #header>
         <div class="card-header">
           <h2>选择数据库</h2>
-          <el-button type="primary" size="small" @click="refreshDatabases">
-            <el-icon><Refresh /></el-icon>
-            刷新列表
-          </el-button>
+          <div class="header-actions">
+            <el-button type="primary" size="small" @click="refreshDatabases">
+              <el-icon><Refresh /></el-icon>
+              刷新列表
+            </el-button>
+            <el-button type="warning" size="small" @click="showBackupDialog">
+              恢复备份
+            </el-button>
+          </div>
         </div>
       </template>
       
@@ -42,13 +47,51 @@
         </el-table-column>
       </el-table>
     </el-card>
+    
+    <!-- 恢复备份对话框 -->
+    <el-dialog
+      v-model="backupDialogVisible"
+      title="恢复数据库备份"
+      width="600px"
+    >
+      <div v-if="loadingBackups" class="loading-container">
+        <el-skeleton :rows="3" animated />
+      </div>
+      
+      <div v-else-if="backupList.length === 0" class="empty-container">
+        <el-empty description="暂无可用备份" />
+      </div>
+      
+      <el-table v-else :data="backupList" style="width: 100%">
+        <el-table-column prop="name" label="备份文件名" />
+        <el-table-column label="操作" width="100">
+          <template #default="scope">
+            <el-button 
+              type="primary"
+              size="small"
+              @click="confirmRestore(scope.row.name)"
+              :loading="restoringBackup === scope.row.name"
+            >
+              恢复
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="backupDialogVisible = false">关闭</el-button>
+          <el-button type="primary" @click="fetchBackupList">刷新列表</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { databaseApi } from '../api'
 
@@ -56,6 +99,12 @@ const router = useRouter()
 const databases = ref([])
 const loading = ref(true)
 const startingDb = ref('')
+
+// 备份相关
+const backupDialogVisible = ref(false)
+const backupList = ref([])
+const loadingBackups = ref(false)
+const restoringBackup = ref('')
 
 // 获取数据库列表
 const fetchDatabases = async () => {
@@ -103,6 +152,63 @@ const useDatabase = (dbName) => {
   router.push('/dashboard/graph')
 }
 
+// 显示备份对话框
+const showBackupDialog = () => {
+  backupDialogVisible.value = true
+  fetchBackupList()
+}
+
+// 获取备份列表
+const fetchBackupList = async () => {
+  loadingBackups.value = true
+  try {
+    const res = await databaseApi.getBackupList()
+    if (res.data && Array.isArray(res.data)) {
+      backupList.value = res.data.map(filename => ({ name: filename }))
+    }
+  } catch (error) {
+    console.error('获取备份列表失败:', error)
+    ElMessage.error('获取备份列表失败')
+  } finally {
+    loadingBackups.value = false
+  }
+}
+
+// 确认恢复备份
+const confirmRestore = (filename) => {
+  ElMessageBox.confirm(
+    '恢复备份会导致当前数据库被删除，确定要继续吗？',
+    '警告',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+    }
+  )
+    .then(() => {
+      restoreDatabase(filename)
+    })
+    .catch(() => {
+      ElMessage.info('已取消恢复操作')
+    })
+}
+
+// 恢复数据库备份
+const restoreDatabase = async (filename) => {
+  restoringBackup.value = filename
+  try {
+    await databaseApi.restoreDatabase(filename)
+    ElMessage.success('数据库恢复成功')
+    backupDialogVisible.value = false
+    refreshDatabases()
+  } catch (error) {
+    console.error('恢复数据库失败:', error)
+    ElMessage.error('恢复数据库失败')
+  } finally {
+    restoringBackup.value = ''
+  }
+}
+
 // 组件挂载时获取数据库列表
 onMounted(() => {
   fetchDatabases()
@@ -126,6 +232,11 @@ onMounted(() => {
   align-items: center;
 }
 
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .card-header h2 {
   margin: 0;
   font-size: 20px;
@@ -135,5 +246,11 @@ onMounted(() => {
 .loading-container, .empty-container {
   padding: 40px 0;
   text-align: center;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style> 
