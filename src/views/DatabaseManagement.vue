@@ -72,7 +72,7 @@
               </el-button>
               <el-button 
                 type="warning" 
-                :disabled="databaseInfo.status !== 'running'" 
+                :disabled="databaseInfo.status === 'running'" 
                 @click="backupDatabase"
                 :loading="backupLoading"
               >
