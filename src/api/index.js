@@ -320,6 +320,11 @@ export const databaseApi = {
   // 获取数据库路径
   getDatabasePath(dbName) {
     return apiClient.get(`/db/data/database/${dbName}/path`)
+  },
+  
+  // 删除数据库
+  deleteDatabase(dbName) {
+    return apiClient.delete(`/db/data/database/${dbName}`)
   }
 }
 

@@ -30,7 +30,7 @@
       
       <el-table v-else :data="databases" style="width: 100%">
         <el-table-column prop="name" label="数据库名称" />
-        <el-table-column label="操作" width="240">
+        <el-table-column label="操作" width="320">
           <template #default="scope">
             <el-button 
               type="primary"
@@ -54,6 +54,15 @@
               @click="useDatabase(scope.row.name)"
             >
               使用
+            </el-button>
+            <el-button 
+              type="danger"
+              size="small"
+              @click="confirmDeleteDatabase(scope.row.name)"
+              :loading="deletingDb === scope.row.name"
+            >
+              <el-icon><Delete /></el-icon>
+              删除
             </el-button>
           </template>
         </el-table-column>
@@ -124,7 +133,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus } from '@element-plus/icons-vue'
+import { Refresh, Plus, Delete } from '@element-plus/icons-vue'
 import { databaseApi } from '../api'
 
 const router = useRouter()
@@ -133,6 +142,7 @@ const loading = ref(true)
 const startingDb = ref('')
 const stoppingDb = ref('')
 const creatingDb = ref(false)
+const deletingDb = ref('')
 
 // 创建数据库相关
 const createDatabaseDialogVisible = ref(false)
@@ -288,6 +298,41 @@ const createDatabase = async () => {
     ElMessage.error('创建数据库失败')
   } finally {
     creatingDb.value = false
+  }
+}
+
+// 确认删除数据库
+const confirmDeleteDatabase = (dbName) => {
+  ElMessageBox.confirm(
+    `您确定要删除数据库 "${dbName}" 吗？此操作无法撤销，数据库中的所有数据将永久丢失！`,
+    '警告',
+    {
+      confirmButtonText: '确定删除',
+      cancelButtonText: '取消',
+      type: 'error',
+      confirmButtonClass: 'el-button--danger'
+    }
+  )
+    .then(() => {
+      deleteDatabase(dbName)
+    })
+    .catch(() => {
+      ElMessage.info('已取消删除操作')
+    })
+}
+
+// 删除数据库
+const deleteDatabase = async (dbName) => {
+  deletingDb.value = dbName
+  try {
+    await databaseApi.deleteDatabase(dbName)
+    ElMessage.success(`数据库 ${dbName} 已成功删除`)
+    refreshDatabases()
+  } catch (error) {
+    console.error('删除数据库失败:', error)
+    ElMessage.error(`删除数据库 ${dbName} 失败`)
+  } finally {
+    deletingDb.value = ''
   }
 }
 
