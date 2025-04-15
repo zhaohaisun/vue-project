@@ -277,6 +277,11 @@ export const databaseApi = {
     return apiClient.get('/db/data/databases')
   },
   
+  // 创建数据库
+  createDatabase(dbName) {
+    return apiClient.post(`/db/data/database/${dbName}/create`)
+  },
+  
   // 启动数据库
   startDatabase(dbName) {
     return apiClient.post(`/db/data/database/${dbName}/start`)

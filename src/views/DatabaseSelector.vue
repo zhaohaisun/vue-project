@@ -5,6 +5,10 @@
         <div class="card-header">
           <h2>选择数据库</h2>
           <div class="header-actions">
+            <el-button type="success" size="small" @click="showCreateDatabaseDialog">
+              <el-icon><Plus /></el-icon>
+              创建数据库
+            </el-button>
             <el-button type="primary" size="small" @click="refreshDatabases">
               <el-icon><Refresh /></el-icon>
               刷新列表
@@ -93,14 +97,34 @@
         </div>
       </template>
     </el-dialog>
+    
+    <!-- 创建数据库对话框 -->
+    <el-dialog
+      v-model="createDatabaseDialogVisible"
+      title="创建数据库"
+      width="400px"
+    >
+      <el-form :model="createDatabaseForm" label-width="100px">
+        <el-form-item label="数据库名称" required>
+          <el-input v-model="createDatabaseForm.name" placeholder="请输入数据库名称"></el-input>
+        </el-form-item>
+      </el-form>
+      
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="createDatabaseDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="createDatabase" :loading="creatingDb">创建</el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Plus } from '@element-plus/icons-vue'
 import { databaseApi } from '../api'
 
 const router = useRouter()
@@ -108,6 +132,13 @@ const databases = ref([])
 const loading = ref(true)
 const startingDb = ref('')
 const stoppingDb = ref('')
+const creatingDb = ref(false)
+
+// 创建数据库相关
+const createDatabaseDialogVisible = ref(false)
+const createDatabaseForm = reactive({
+  name: ''
+})
 
 // 备份相关
 const backupDialogVisible = ref(false)
@@ -230,6 +261,33 @@ const restoreDatabase = async (filename) => {
     ElMessage.error('恢复数据库失败')
   } finally {
     restoringBackup.value = ''
+  }
+}
+
+// 显示创建数据库对话框
+const showCreateDatabaseDialog = () => {
+  createDatabaseDialogVisible.value = true
+  createDatabaseForm.name = ''
+}
+
+// 创建数据库
+const createDatabase = async () => {
+  if (!createDatabaseForm.name) {
+    ElMessage.warning('请输入数据库名称')
+    return
+  }
+  
+  creatingDb.value = true
+  try {
+    await databaseApi.createDatabase(createDatabaseForm.name)
+    ElMessage.success(`数据库 ${createDatabaseForm.name} 创建成功`)
+    createDatabaseDialogVisible.value = false
+    refreshDatabases()
+  } catch (error) {
+    console.error('创建数据库失败:', error)
+    ElMessage.error('创建数据库失败')
+  } finally {
+    creatingDb.value = false
   }
 }
 
