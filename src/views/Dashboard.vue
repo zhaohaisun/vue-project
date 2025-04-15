@@ -210,8 +210,9 @@ const handleLogout = async () => {
   try {
     await userApi.logout()
     
-    // 只清除token标志
+    // 清除所有用户相关标志
     localStorage.removeItem('token')
+    localStorage.removeItem('username')
     
     ElMessage.success('已退出登录')
     router.push('/login')
@@ -256,6 +257,12 @@ onMounted(async () => {
   if (!token) {
     router.push('/login')
     return
+  }
+  
+  // 从localStorage获取用户名
+  const storedUsername = localStorage.getItem('username')
+  if (storedUsername) {
+    username.value = storedUsername
   }
   
   try {

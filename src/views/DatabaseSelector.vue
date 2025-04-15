@@ -75,6 +75,15 @@
       title="恢复数据库备份"
       width="600px"
     >
+      <div v-if="username" class="filter-info">
+        <el-alert
+          title="备份文件过滤"
+          type="info"
+          :closable="false"
+          description="当前仅显示以您用户名开头的备份文件"
+        />
+      </div>
+      
       <div v-if="loadingBackups" class="loading-container">
         <el-skeleton :rows="3" animated />
       </div>
@@ -155,6 +164,7 @@ const backupDialogVisible = ref(false)
 const backupList = ref([])
 const loadingBackups = ref(false)
 const restoringBackup = ref('')
+const username = ref(localStorage.getItem('username') || '')
 
 // 获取数据库列表
 const fetchDatabases = async () => {
@@ -229,7 +239,14 @@ const fetchBackupList = async () => {
   try {
     const res = await databaseApi.getBackupList()
     if (res.data && Array.isArray(res.data)) {
-      backupList.value = res.data.map(filename => ({ name: filename }))
+      // 过滤备份文件，只显示以当前用户名开头的文件
+      const filteredFiles = res.data.filter(filename => {
+        // 如果未获取到用户名，则显示所有备份文件
+        if (!username.value) return true;
+        // 检查文件名是否以用户名开头
+        return filename.startsWith(username.value);
+      });
+      backupList.value = filteredFiles.map(filename => ({ name: filename }))
     }
   } catch (error) {
     console.error('获取备份列表失败:', error)
@@ -379,5 +396,9 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+}
+
+.filter-info {
+  margin-bottom: 16px;
 }
 </style> 

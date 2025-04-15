@@ -74,9 +74,9 @@ const handleLogin = async () => {
     
     const res = await userApi.login(loginForm)
     
-    // 登录成功后只保存一个标志，不再保存用户名和密码
-    // 依赖服务器设置的会话cookie进行认证
+    // 登录成功后保存token和用户名
     localStorage.setItem('token', 'logged-in') // 用于前端判断是否已登录
+    localStorage.setItem('username', loginForm.username) // 保存用户名用于过滤备份文件
     
     ElMessage.success('登录成功')
     router.push('/select-database')
