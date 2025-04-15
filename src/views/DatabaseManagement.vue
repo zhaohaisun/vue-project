@@ -1,6 +1,6 @@
 <template>
   <div class="database-management">
-    <el-row>
+    <el-row :gutter="20">
       <el-col :span="24">
         <el-card class="db-card">
           <template #header>
@@ -14,72 +14,95 @@
             </div>
           </template>
           
-          <div class="db-status-container">
-            <div class="status-header">
-              <h3>数据库状态</h3>
-              <el-tag 
-                v-if="databaseInfo.status" 
-                :type="databaseInfo.status === 'running' ? 'success' : 'danger'"
-              >
-                {{ databaseInfo.status === 'running' ? '运行中' : '已停止' }}
-              </el-tag>
-            </div>
-            
-            <el-descriptions border :column="1" class="db-info">
-              <el-descriptions-item label="数据库名称">
-                {{ databaseInfo.name || 'neo4j-hello-db' }}
-              </el-descriptions-item>
-              <el-descriptions-item label="数据文件位置">
-                {{ databaseInfo.path || '获取中...' }}
-              </el-descriptions-item>
-            </el-descriptions>
-            
-            <!-- 数据库文件大小详情 -->
-            <div class="space-details">
-              <h4>数据库文件大小详情</h4>
-              <el-table 
-                :data="spaceDetails" 
-                style="width: 100%" 
-                size="small" 
-                border 
-                stripe
-                :header-cell-style="{ backgroundColor: '#f5f7fa' }"
-              >
-                <el-table-column prop="name" label="数据类型" width="180" />
-                <el-table-column prop="size" label="大小" />
-              </el-table>
-              <div class="total-size">
-                <span>总大小: <strong>{{ calculateTotalSize() }}</strong></span>
+          <el-tabs type="border-card">
+            <el-tab-pane label="数据库状态">
+              <div class="db-status-container">
+                <div class="status-header">
+                  <h3>数据库状态</h3>
+                  <el-tag 
+                    v-if="databaseInfo.status" 
+                    :type="databaseInfo.status === 'running' ? 'success' : 'danger'"
+                  >
+                    {{ databaseInfo.status === 'running' ? '运行中' : '已停止' }}
+                  </el-tag>
+                </div>
+                
+                <el-descriptions border :column="1" class="db-info">
+                  <el-descriptions-item label="数据库名称">
+                    {{ databaseInfo.name || 'neo4j-hello-db' }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="数据文件位置">
+                    {{ databaseInfo.path || '获取中...' }}
+                  </el-descriptions-item>
+                </el-descriptions>
+                
+                <!-- 数据库文件大小详情 -->
+                <div class="space-details">
+                  <h4>数据库文件大小详情</h4>
+                  <el-table 
+                    :data="spaceDetails" 
+                    style="width: 100%" 
+                    size="small" 
+                    border 
+                    stripe
+                    :header-cell-style="{ backgroundColor: '#f5f7fa' }"
+                  >
+                    <el-table-column prop="name" label="数据类型" width="180" />
+                    <el-table-column prop="size" label="大小" />
+                  </el-table>
+                  <div class="total-size">
+                    <span>总大小: <strong>{{ calculateTotalSize() }}</strong></span>
+                  </div>
+                </div>
+                
+                <div class="db-actions">
+                  <el-button 
+                    type="primary" 
+                    :disabled="databaseInfo.status === 'running'" 
+                    @click="startDatabase"
+                    :loading="startLoading"
+                  >
+                    启动数据库
+                  </el-button>
+                  <el-button 
+                    type="danger" 
+                    :disabled="databaseInfo.status !== 'running'" 
+                    @click="stopDatabase"
+                    :loading="stopLoading"
+                  >
+                    关闭数据库
+                  </el-button>
+                  <el-button 
+                    type="warning" 
+                    :disabled="databaseInfo.status === 'running'" 
+                    @click="backupDatabase"
+                    :loading="backupLoading"
+                  >
+                    备份数据库
+                  </el-button>
+                </div>
               </div>
-            </div>
+            </el-tab-pane>
             
-            <div class="db-actions">
-              <el-button 
-                type="primary" 
-                :disabled="databaseInfo.status === 'running'" 
-                @click="startDatabase"
-                :loading="startLoading"
-              >
-                启动数据库
-              </el-button>
-              <el-button 
-                type="danger" 
-                :disabled="databaseInfo.status !== 'running'" 
-                @click="stopDatabase"
-                :loading="stopLoading"
-              >
-                关闭数据库
-              </el-button>
-              <el-button 
-                type="warning" 
-                :disabled="databaseInfo.status === 'running'" 
-                @click="backupDatabase"
-                :loading="backupLoading"
-              >
-                备份数据库
-              </el-button>
-            </div>
-          </div>
+            <el-tab-pane label="HTTP日志">
+              <div class="http-logs-container">
+                <div class="logs-header">
+                  <h3>系统HTTP请求日志</h3>
+                  <el-button type="primary" size="small" @click="fetchHttpLogs" :loading="logsLoading">
+                    <el-icon><Refresh /></el-icon> 刷新日志
+                  </el-button>
+                </div>
+                
+                <div v-if="logsLoading" class="logs-loading">
+                  <el-skeleton :rows="10" animated />
+                </div>
+                
+                <div v-else class="logs-content">
+                  <pre class="logs-pre">{{ httpLogsContent }}</pre>
+                </div>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
         </el-card>
       </el-col>
     </el-row>
@@ -87,10 +110,10 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { databaseApi } from '../api'
+import { databaseApi, userApi } from '../api'
 
 // 数据加载状态
 const startLoading = ref(false)
@@ -273,9 +296,33 @@ const formatFileSize = (size) => {
   return `${formattedSize.toFixed(2)} ${units[index]}`
 }
 
+// HTTP日志相关
+const httpLogs = ref([])
+const httpLogsContent = ref('')
+const logsLoading = ref(false)
+
+// 获取HTTP日志
+const fetchHttpLogs = async () => {
+  logsLoading.value = true
+  try {
+    const response = await userApi.getUserLogs()
+    // 保存原始响应数据
+    httpLogs.value = response.data || []
+    // 格式化为JSON字符串显示
+    httpLogsContent.value = JSON.stringify(response.data, null, 2)
+  } catch (error) {
+    console.error('获取HTTP日志失败:', error)
+    ElMessage.error('获取HTTP日志失败')
+    httpLogsContent.value = '获取日志失败: ' + (error.message || '未知错误')
+  } finally {
+    logsLoading.value = false
+  }
+}
+
 // 页面加载时获取数据
 onMounted(() => {
   fetchDatabaseInfo()
+  fetchHttpLogs()
 })
 </script>
 
@@ -345,5 +392,44 @@ onMounted(() => {
   justify-content: space-between;
   margin-top: auto;
   padding-top: 20px;
+}
+
+.http-logs-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.logs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.logs-header h3 {
+  margin: 0;
+}
+
+.logs-loading, .empty-logs {
+  padding: 20px 0;
+  text-align: center;
+}
+
+.logs-content {
+  overflow-y: auto;
+  max-height: calc(100vh - 250px);
+}
+
+.logs-pre {
+  background-color: #f7f9fb;
+  padding: 15px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
 }
 </style> 
