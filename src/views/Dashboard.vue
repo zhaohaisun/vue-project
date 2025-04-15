@@ -231,7 +231,8 @@ const handleChangePassword = async () => {
     passwordLoading.value = true
     
     const payload = {
-      password: passwordForm.newPassword
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword
     }
     
     await userApi.changePassword(username.value, payload)

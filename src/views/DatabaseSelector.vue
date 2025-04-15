@@ -16,6 +16,10 @@
             <el-button type="warning" size="small" @click="showBackupDialog">
               恢复备份
             </el-button>
+            <el-button type="danger" size="small" @click="handleLogout">
+              <el-icon><SwitchButton /></el-icon>
+              退出登录
+            </el-button>
           </div>
         </div>
       </template>
@@ -142,8 +146,8 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, Delete } from '@element-plus/icons-vue'
-import { databaseApi } from '../api'
+import { Refresh, Plus, Delete, SwitchButton } from '@element-plus/icons-vue'
+import { databaseApi, userApi } from '../api'
 
 const router = useRouter()
 const databases = ref([])
@@ -350,6 +354,23 @@ const deleteDatabase = async (dbName) => {
     ElMessage.error(`删除数据库 ${dbName} 失败`)
   } finally {
     deletingDb.value = ''
+  }
+}
+
+// 退出登录
+const handleLogout = async () => {
+  try {
+    await userApi.logout()
+    
+    // 清除所有用户相关标志
+    localStorage.removeItem('token')
+    localStorage.removeItem('username')
+    
+    ElMessage.success('已退出登录')
+    router.push('/login')
+  } catch (error) {
+    console.error('登出失败:', error)
+    ElMessage.error('登出失败，请稍后再试')
   }
 }
 
