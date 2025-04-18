@@ -34,16 +34,8 @@
       
       <el-table v-else :data="databases" style="width: 100%">
         <el-table-column prop="name" label="数据库名称" />
-        <el-table-column label="操作" width="320">
+        <el-table-column label="操作" width="240">
           <template #default="scope">
-            <el-button 
-              type="primary"
-              size="small"
-              @click="startDatabase(scope.row.name)"
-              :loading="startingDb === scope.row.name"
-            >
-              启动
-            </el-button>
             <el-button 
               type="danger"
               size="small"
@@ -55,7 +47,8 @@
             <el-button 
               type="success"
               size="small"
-              @click="useDatabase(scope.row.name)"
+              @click="startAndUseDatabase(scope.row.name)"
+              :loading="startingDb === scope.row.name"
             >
               使用
             </el-button>
@@ -190,18 +183,17 @@ const refreshDatabases = () => {
   fetchDatabases()
 }
 
-// 启动数据库
-const startDatabase = async (dbName) => {
+// 合并启动和使用功能
+const startAndUseDatabase = async (dbName) => {
   startingDb.value = dbName
   try {
     await databaseApi.startDatabase(dbName)
     ElMessage.success(`数据库 ${dbName} 启动成功`)
-    
-    // 自动使用刚启动的数据库
     useDatabase(dbName)
   } catch (error) {
     console.error('启动数据库失败:', error)
-    ElMessage.error(`启动数据库 ${dbName} 失败`)
+    ElMessage.warning(`启动数据库 ${dbName} 失败，将直接使用该数据库`)
+    useDatabase(dbName)
   } finally {
     startingDb.value = ''
   }
