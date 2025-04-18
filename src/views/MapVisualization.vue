@@ -190,7 +190,7 @@ const handleZoom = (event) => {
 
   // 计算缩放因子
   const scaleMultiplier = event.deltaY < 0 ? 1.1 : 1 / 1.1;
-  const newZoom = Math.max(0.1, Math.min(10, zoomLevel.value * scaleMultiplier));
+  const newZoom = Math.max(0.1, Math.min(40, zoomLevel.value * scaleMultiplier));
 
   // 更新缩放级别
   zoomLevel.value = newZoom;
