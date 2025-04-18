@@ -37,20 +37,20 @@
         <el-table-column label="操作" width="240">
           <template #default="scope">
             <el-button 
-              type="danger"
-              size="small"
-              @click="stopDatabase(scope.row.name)"
-              :loading="stoppingDb === scope.row.name"
-            >
-              停止
-            </el-button>
-            <el-button 
               type="success"
               size="small"
               @click="startAndUseDatabase(scope.row.name)"
               :loading="startingDb === scope.row.name"
             >
               使用
+            </el-button>
+            <el-button 
+              type="danger"
+              size="small"
+              @click="stopDatabase(scope.row.name)"
+              :loading="stoppingDb === scope.row.name"
+            >
+              停止
             </el-button>
             <el-button 
               type="danger"
