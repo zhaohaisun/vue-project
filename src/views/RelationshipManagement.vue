@@ -150,7 +150,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑关系' : '创建关系'"
-      width="580px"
+      width="800px"
       destroy-on-close
     >
       <el-form :model="relationForm" :rules="rules" ref="relationFormRef" label-width="100px">
@@ -232,6 +232,49 @@
         <el-form-item>
           <el-button type="primary" :icon="Plus" @click="addProperty">添加属性</el-button>
         </el-form-item>
+
+        <el-divider content-position="left">时态属性 (Temporal Properties)</el-divider>
+
+        <div v-for="(tempProp, index) in relationForm.temporalProperties" :key="'temp-' + index" class="temporal-property-item">
+          <div class="temporal-property-header">
+            <span class="temporal-property-title">时态属性 #{{ index + 1 }}</span>
+            <el-button type="danger" :icon="Delete" circle size="small" @click="removeTemporalProperty(index)" />
+          </div>
+          
+          <el-form-item label="属性名" :prop="'temporalProperties.' + index + '.key'" :rules="tempProp.value || tempProp.time ? { required: true, message: '请输入属性名', trigger: 'blur' } : []">
+            <el-input v-model="tempProp.key" placeholder="请输入属性名" />
+          </el-form-item>
+          
+          <el-form-item label="属性值" :prop="'temporalProperties.' + index + '.value'" :rules="tempProp.key || tempProp.time ? { required: true, message: '请输入属性值', trigger: 'blur' } : []">
+            <el-input v-model="tempProp.value" placeholder="请输入属性值" />
+          </el-form-item>
+          
+          <el-form-item label="时间类型">
+            <el-radio-group v-model="tempProp.isRange" class="time-type-selector">
+              <el-radio :label="false">单一时间点</el-radio>
+              <el-radio :label="true">时间范围</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          
+          <el-form-item :label="tempProp.isRange ? '时间范围' : '时间点'" :prop="'temporalProperties.' + index + '.time'" :rules="tempProp.key || tempProp.value ? { required: true, message: '请选择时间', trigger: 'change' } : []">
+            <el-date-picker
+              v-model="tempProp.time"
+              :type="tempProp.isRange ? 'datetimerange' : 'datetime'"
+              placeholder="选择时间"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              style="width: 100%"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+            />
+          </el-form-item>
+          
+          <el-divider v-if="index < relationForm.temporalProperties.length - 1" />
+        </div>
+
+        <el-form-item>
+          <el-button type="success" :icon="Plus" @click="addTemporalProperty">添加时态属性</el-button>
+        </el-form-item>
+
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -247,7 +290,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Edit, Delete, Plus } from '@element-plus/icons-vue'
+import { Refresh, Edit, Delete, Plus, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi, relationshipApi } from '../api'
 
@@ -290,7 +333,8 @@ const relationForm = reactive({
   sourceId: '',
   targetId: '',
   type: '',
-  properties: [{ key: '', value: '' }]
+  properties: [{ key: '', value: '' }],
+  temporalProperties: [{ key: '', value: '', time: null, isRange: false }]
 })
 
 // 表单验证规则
@@ -444,6 +488,7 @@ const openAddDialog = async () => {
   relationForm.targetId = ''
   relationForm.type = ''
   relationForm.properties = [{ key: '', value: '' }]
+  relationForm.temporalProperties = [{ key: '', value: '', time: null, isRange: false }]
 }
 
 // 编辑关系对话框
@@ -465,6 +510,9 @@ const openEditDialog = (row) => {
   if (relationForm.properties.length === 0) {
     relationForm.properties.push({ key: '', value: '' })
   }
+
+  // 重置时态属性部分 (编辑时不清空，允许添加新的时态属性)
+  relationForm.temporalProperties = [{ key: '', value: '', time: null, isRange: false }]
 }
 
 // 添加属性
@@ -477,6 +525,16 @@ const removeProperty = (index) => {
   relationForm.properties.splice(index, 1)
 }
 
+// 添加时态属性
+const addTemporalProperty = () => {
+  relationForm.temporalProperties.push({ key: '', value: '', time: null, isRange: false })
+}
+
+// 移除时态属性
+const removeTemporalProperty = (index) => {
+  relationForm.temporalProperties.splice(index, 1)
+}
+
 // 提交表单
 const submitForm = async () => {
   if (!relationFormRef.value) return
@@ -485,7 +543,7 @@ const submitForm = async () => {
     await relationFormRef.value.validate()
     submitLoading.value = true
     
-    // 构建属性对象
+    // 构建普通属性对象
     const properties = {}
     relationForm.properties.forEach(prop => {
       if (prop.key && prop.value) {
@@ -493,11 +551,12 @@ const submitForm = async () => {
       }
     })
     
+    let relationIdToUpdate = currentRelation.value?.id;
+
     if (isEdit.value) {
       // 编辑关系：只更新属性
-      await relationshipApi.setRelationshipProperties(currentRelation.value.id, properties)
+      await relationshipApi.setRelationshipProperties(relationIdToUpdate, properties)
       
-      ElMessage.success('关系更新成功')
     } else {
       // 创建关系
       const payload = {
@@ -506,16 +565,36 @@ const submitForm = async () => {
         data: properties
       }
       
-      await relationshipApi.createRelationship(relationForm.sourceId, payload)
-      
-      ElMessage.success('关系创建成功')
+      const relRes = await relationshipApi.createRelationship(relationForm.sourceId, payload)
+      // 从返回的 self URL 中提取新关系的 ID
+      relationIdToUpdate = relRes.data.self.split('/').pop()
     }
-    
+
+    // 处理时态属性
+    if (relationIdToUpdate) {
+        for (const tempProp of relationForm.temporalProperties) {
+          if (tempProp.key && tempProp.value && tempProp.time) {
+            if (tempProp.isRange && Array.isArray(tempProp.time) && tempProp.time.length === 2) {
+              // 设置时间范围属性
+              const startTime = new Date(tempProp.time[0]).toISOString()
+              const endTime = new Date(tempProp.time[1]).toISOString()
+              await relationshipApi.setTemporalPropertyRange(relationIdToUpdate, tempProp.key, startTime, endTime, { value: tempProp.value })
+            } else if (!tempProp.isRange && !Array.isArray(tempProp.time)) {
+              // 设置单一时间点属性
+              const time = new Date(tempProp.time).toISOString()
+              await relationshipApi.setTemporalProperty(relationIdToUpdate, tempProp.key, time, { value: tempProp.value })
+            }
+          }
+        }
+    }
+
+    ElMessage.success(isEdit.value ? '关系更新成功' : '关系创建成功')
     dialogVisible.value = false
     fetchRelationships()
+
   } catch (error) {
     console.error('保存关系失败:', error)
-    ElMessage.error(isEdit.value ? '更新关系失败' : '创建关系失败')
+    ElMessage.error((isEdit.value ? '更新关系失败: ' : '创建关系失败: ') + (error.response?.data?.message || error.message || '未知错误'))
   } finally {
     submitLoading.value = false
   }
@@ -598,7 +677,7 @@ onMounted(() => {
 }
 
 .property-item {
-  margin-bottom: 10px;
+  margin-bottom: 18px;
 }
 
 .pagination-container {
@@ -635,5 +714,45 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.temporal-property-item {
+  margin-bottom: 25px;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.temporal-property-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.temporal-property-title {
+  font-weight: bold;
+  color: #606266;
+}
+
+.time-type-selector {
+  margin-bottom: 10px;
+}
+
+:deep(.el-input__inner),
+:deep(.el-date-editor) {
+  width: 100%;
+}
+
+:deep(.el-date-editor .el-input__wrapper) {
+  width: 100%;
+}
+
+:deep(.el-date-editor--datetimerange) {
+  width: 100%;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
 }
 </style> 

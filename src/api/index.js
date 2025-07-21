@@ -164,6 +164,26 @@ export const nodeApi = {
   // 获取带特定标签的节点
   getNodesByLabel(label) {
     return apiClient.get(`/db/data/label/${label}/nodes`)
+  },
+  
+  // 获取时态属性
+  getTemporalProperty(id, key, time) {
+    return apiClient.get(`/db/data/node/${id}/temporal/${key}/${time}`)
+  },
+  
+  // 设置时态属性
+  setTemporalProperty(id, key, time, value) {
+    return apiClient.put(`/db/data/node/${id}/temporal/${key}/${time}`, value)
+  },
+  
+  // 设置时态属性范围
+  setTemporalPropertyRange(id, key, startTime, endTime, value) {
+    return apiClient.put(`/db/data/node/${id}/temporal/${key}/${startTime}/${endTime}`, value)
+  },
+  
+  // 删除时态属性
+  deleteTemporalProperty(id, key) {
+    return apiClient.delete(`/db/data/node/${id}/temporal/${key}`)
   }
 }
 
@@ -259,6 +279,26 @@ export const relationshipApi = {
   // 获取关系类型
   getRelationshipTypes() {
     return apiClient.get('/db/data/relationship/types')
+  },
+  
+  // 获取时态属性
+  getTemporalProperty(id, key, time) {
+    return apiClient.get(`/db/data/relationship/${id}/temporal/${key}/${time}`)
+  },
+  
+  // 设置时态属性
+  setTemporalProperty(id, key, time, value) {
+    return apiClient.put(`/db/data/relationship/${id}/temporal/${key}/${time}`, value)
+  },
+  
+  // 设置时态属性范围
+  setTemporalPropertyRange(id, key, startTime, endTime, value) {
+    return apiClient.put(`/db/data/relationship/${id}/temporal/${key}/${startTime}/${endTime}`, value)
+  },
+  
+  // 删除时态属性
+  deleteTemporalProperty(id, key) {
+    return apiClient.delete(`/db/data/relationship/${id}/temporal/${key}`)
   }
 }
 

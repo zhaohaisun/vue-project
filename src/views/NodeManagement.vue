@@ -128,7 +128,7 @@
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑节点' : '创建节点'"
-      width="580px"
+      width="800px"
       destroy-on-close
     >
       <el-form :model="nodeForm" :rules="rules" ref="nodeFormRef" label-width="100px">
@@ -173,6 +173,49 @@
         <el-form-item>
           <el-button type="primary" :icon="Plus" @click="addProperty">添加属性</el-button>
         </el-form-item>
+
+        <el-divider content-position="left">时态属性 (Temporal Properties)</el-divider>
+
+        <div v-for="(tempProp, index) in nodeForm.temporalProperties" :key="'temp-' + index" class="temporal-property-item">
+          <div class="temporal-property-header">
+            <span class="temporal-property-title">时态属性 #{{ index + 1 }}</span>
+            <el-button type="danger" :icon="Delete" circle size="small" @click="removeTemporalProperty(index)" />
+          </div>
+          
+          <el-form-item label="属性名" :prop="'temporalProperties.' + index + '.key'" :rules="tempProp.value || tempProp.time ? { required: true, message: '请输入属性名', trigger: 'blur' } : []">
+            <el-input v-model="tempProp.key" placeholder="请输入属性名" />
+          </el-form-item>
+          
+          <el-form-item label="属性值" :prop="'temporalProperties.' + index + '.value'" :rules="tempProp.key || tempProp.time ? { required: true, message: '请输入属性值', trigger: 'blur' } : []">
+            <el-input v-model="tempProp.value" placeholder="请输入属性值" />
+          </el-form-item>
+          
+          <el-form-item label="时间类型">
+            <el-radio-group v-model="tempProp.isRange" class="time-type-selector">
+              <el-radio :label="false">单一时间点</el-radio>
+              <el-radio :label="true">时间范围</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          
+          <el-form-item :label="tempProp.isRange ? '时间范围' : '时间点'" :prop="'temporalProperties.' + index + '.time'" :rules="tempProp.key || tempProp.value ? { required: true, message: '请选择时间', trigger: 'change' } : []">
+            <el-date-picker
+              v-model="tempProp.time"
+              :type="tempProp.isRange ? 'datetimerange' : 'datetime'"
+              placeholder="选择时间"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              style="width: 100%"
+              value-format="YYYY-MM-DDTHH:mm:ss"
+            />
+          </el-form-item>
+          
+          <el-divider v-if="index < nodeForm.temporalProperties.length - 1" />
+        </div>
+
+        <el-form-item>
+          <el-button type="success" :icon="Plus" @click="addTemporalProperty">添加时态属性</el-button>
+        </el-form-item>
+
       </el-form>
       <template #footer>
         <span class="dialog-footer">
@@ -188,7 +231,7 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { Refresh, Edit, Delete, Plus } from '@element-plus/icons-vue'
+import { Refresh, Edit, Delete, Plus, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi, labelApi } from '../api'
 
@@ -226,7 +269,8 @@ const currentNodeId = ref(null)
 // 节点表单
 const nodeForm = reactive({
   labels: [],
-  properties: [{ key: '', value: '' }]
+  properties: [{ key: '', value: '' }],
+  temporalProperties: [{ key: '', value: '', time: null, isRange: false }]
 })
 
 // 表单验证规则
@@ -286,6 +330,7 @@ const openAddDialog = () => {
   // 重置表单
   nodeForm.labels = []
   nodeForm.properties = [{ key: '', value: '' }]
+  nodeForm.temporalProperties = [{ key: '', value: '', time: null, isRange: false }]
 }
 
 // 编辑节点对话框
@@ -307,6 +352,9 @@ const openEditDialog = (row) => {
   if (nodeForm.properties.length === 0) {
     nodeForm.properties.push({ key: '', value: '' })
   }
+
+  // 重置时态属性部分 (编辑时不清空，允许添加新的时态属性)
+  nodeForm.temporalProperties = [{ key: '', value: '', time: null, isRange: false }]
 }
 
 // 添加属性
@@ -319,6 +367,16 @@ const removeProperty = (index) => {
   nodeForm.properties.splice(index, 1)
 }
 
+// 添加时态属性
+const addTemporalProperty = () => {
+  nodeForm.temporalProperties.push({ key: '', value: '', time: null, isRange: false })
+}
+
+// 移除时态属性
+const removeTemporalProperty = (index) => {
+  nodeForm.temporalProperties.splice(index, 1)
+}
+
 // 提交表单
 const submitForm = async () => {
   if (!nodeFormRef.value) return
@@ -327,7 +385,7 @@ const submitForm = async () => {
     await nodeFormRef.value.validate()
     submitLoading.value = true
     
-    // 构建属性对象
+    // 构建普通属性对象
     const properties = {}
     nodeForm.properties.forEach(prop => {
       if (prop.key && prop.value) {
@@ -335,35 +393,50 @@ const submitForm = async () => {
       }
     })
     
+    let nodeIdToUpdate = currentNodeId.value;
+
     if (isEdit.value) {
       // 编辑节点：更新标签和属性
-      await nodeApi.replaceNodeLabels(currentNodeId.value, nodeForm.labels)
+      await nodeApi.replaceNodeLabels(nodeIdToUpdate, nodeForm.labels)
+      await nodeApi.updateNodeProperties(nodeIdToUpdate, properties)
       
-      // 更新属性
-      await nodeApi.updateNodeProperties(currentNodeId.value, properties)
-      
-      ElMessage.success('节点更新成功')
     } else {
       // 创建节点
       const nodeRes = await nodeApi.createNode()
-      const nodeId = nodeRes.data.metadata.id
+      nodeIdToUpdate = nodeRes.data.metadata.id
       
       // 添加标签
-      await nodeApi.addNodeLabels(nodeId, nodeForm.labels)
+      await nodeApi.addNodeLabels(nodeIdToUpdate, nodeForm.labels)
       
       // 设置属性
       if (Object.keys(properties).length > 0) {
-        await nodeApi.updateNodeProperties(nodeId, properties)
+        await nodeApi.updateNodeProperties(nodeIdToUpdate, properties)
       }
-      
-      ElMessage.success('节点创建成功')
     }
-    
+
+    // 处理时态属性
+    for (const tempProp of nodeForm.temporalProperties) {
+      if (tempProp.key && tempProp.value && tempProp.time) {
+        if (tempProp.isRange && Array.isArray(tempProp.time) && tempProp.time.length === 2) {
+          // 设置时间范围属性
+          const startTime = new Date(tempProp.time[0]).toISOString()
+          const endTime = new Date(tempProp.time[1]).toISOString()
+          await nodeApi.setTemporalPropertyRange(nodeIdToUpdate, tempProp.key, startTime, endTime, { value: tempProp.value })
+        } else if (!tempProp.isRange && !Array.isArray(tempProp.time)) {
+          // 设置单一时间点属性
+          const time = new Date(tempProp.time).toISOString()
+          await nodeApi.setTemporalProperty(nodeIdToUpdate, tempProp.key, time, { value: tempProp.value })
+        }
+      }
+    }
+
+    ElMessage.success(isEdit.value ? '节点更新成功' : '节点创建成功')
     dialogVisible.value = false
     fetchNodes()
+
   } catch (error) {
     console.error('保存节点失败:', error)
-    ElMessage.error(isEdit.value ? '更新节点失败' : '创建节点失败')
+    ElMessage.error((isEdit.value ? '更新节点失败: ' : '创建节点失败: ') + (error.response?.data?.message || error.message || '未知错误'))
   } finally {
     submitLoading.value = false
   }
@@ -435,7 +508,7 @@ onMounted(() => {
 }
 
 .property-item {
-  margin-bottom: 10px;
+  margin-bottom: 18px;
 }
 
 .pagination-container {
@@ -446,5 +519,45 @@ onMounted(() => {
 
 .node-properties {
   margin: 10px;
+}
+
+.temporal-property-item {
+  margin-bottom: 25px;
+  background-color: #f9f9f9;
+  padding: 15px;
+  border-radius: 8px;
+}
+
+.temporal-property-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.temporal-property-title {
+  font-weight: bold;
+  color: #606266;
+}
+
+.time-type-selector {
+  margin-bottom: 10px;
+}
+
+:deep(.el-input__inner),
+:deep(.el-date-editor) {
+  width: 100%;
+}
+
+:deep(.el-date-editor .el-input__wrapper) {
+  width: 100%;
+}
+
+:deep(.el-date-editor--datetimerange) {
+  width: 100%;
+}
+
+:deep(.el-form-item__label) {
+  font-weight: 500;
 }
 </style> 
