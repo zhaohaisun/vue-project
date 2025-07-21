@@ -155,7 +155,13 @@
     >
       <el-form :model="relationForm" :rules="rules" ref="relationFormRef" label-width="100px">
         <el-form-item v-if="!isEdit" label="起始节点" prop="sourceId">
-          <el-select v-model="relationForm.sourceId" placeholder="请选择起始节点">
+          <el-select 
+            v-model="relationForm.sourceId" 
+            placeholder="请选择起始节点"
+            filterable
+            clearable
+            style="width: 100%"
+          >
             <el-option
               v-for="node in nodes"
               :key="node.id"
@@ -166,7 +172,13 @@
         </el-form-item>
         
         <el-form-item v-if="!isEdit" label="目标节点" prop="targetId">
-          <el-select v-model="relationForm.targetId" placeholder="请选择目标节点">
+          <el-select 
+            v-model="relationForm.targetId" 
+            placeholder="请选择目标节点"
+            filterable
+            clearable
+            style="width: 100%"
+          >
             <el-option
               v-for="node in nodes"
               :key="node.id"
@@ -356,24 +368,34 @@ const getNodeLabel = (node) => {
   const labels = node.labels || []
   const properties = node.properties || {}
   
-  // 尝试使用name属性
-  if (properties.name) {
-    return `${properties.name} (${labels.join(', ')})`
-  }
+  // 构建基本的ID显示
+  let baseLabel = `ID: ${id}`
   
-  // 否则使用第一个属性
-  const firstProp = Object.keys(properties)[0]
-  if (firstProp) {
-    return `${properties[firstProp]} (${labels.join(', ')})`
-  }
-  
-  // 如果没有属性，则使用标签和ID
+  // 添加标签信息
   if (labels.length > 0) {
-    return `${labels[0]}-${id}`
+    baseLabel += ` [${labels.join(', ')}]`
   }
   
-  // 最后只使用ID
-  return `Node-${id}`
+  // 尝试添加有意义的属性信息
+  if (properties.name) {
+    baseLabel += ` - ${properties.name}`
+  } else if (properties.title) {
+    baseLabel += ` - ${properties.title}`
+  } else if (properties.label) {
+    baseLabel += ` - ${properties.label}`
+  } else {
+    // 如果有其他属性，显示第一个非空属性
+    const propKeys = Object.keys(properties)
+    if (propKeys.length > 0) {
+      const firstKey = propKeys[0]
+      const firstValue = properties[firstKey]
+      if (firstValue && firstValue.toString().length < 50) { // 限制显示长度
+        baseLabel += ` - ${firstKey}: ${firstValue}`
+      }
+    }
+  }
+  
+  return baseLabel
 }
 
 // 获取所有关系数据
@@ -451,7 +473,31 @@ const fetchNodesForSelection = async () => {
   try {
     // 使用分页API获取节点数据
     const nodesRes = await nodeApi.getNodesPaginated(1, 1000) // 获取前1000个节点用于选择
-    nodes.value = nodesRes.data || []
+    const rawNodes = nodesRes.data || []
+    
+    // 处理节点数据，确保每个节点都有正确的ID
+    const processedNodes = rawNodes.map(node => {
+      let nodeId = node.id
+      
+      // 如果节点数据中包含完整URL，提取ID
+      if (node.self) {
+        nodeId = node.self.split('/').pop()
+      }
+      
+      // 确保ID是字符串类型
+      nodeId = String(nodeId)
+      
+      return {
+        id: nodeId,
+        labels: node.labels || [],
+        properties: node.data || node.properties || {},
+        self: node.self
+      }
+    })
+    
+    nodes.value = processedNodes
+    console.log('获取到节点数据:', processedNodes.length, '个节点')
+    
   } catch (error) {
     console.error('获取节点数据失败:', error)
     ElMessage.error('获取节点数据失败，请检查后端服务是否正常运行')
@@ -483,12 +529,20 @@ const openAddDialog = async () => {
   isEdit.value = false
   dialogVisible.value = true
   currentRelation.value = null
+  
   // 重置表单
-  relationForm.sourceId = ''
-  relationForm.targetId = ''
-  relationForm.type = ''
-  relationForm.properties = [{ key: '', value: '' }]
-  relationForm.temporalProperties = [{ key: '', value: '', time: null, isRange: false }]
+  Object.assign(relationForm, {
+    sourceId: '',
+    targetId: '',
+    type: '',
+    properties: [{ key: '', value: '' }],
+    temporalProperties: [{ key: '', value: '', time: null, isRange: false }]
+  })
+  
+  // 如果有表单引用，清除验证
+  if (relationFormRef.value) {
+    relationFormRef.value.clearValidate()
+  }
 }
 
 // 编辑关系对话框
@@ -559,13 +613,19 @@ const submitForm = async () => {
       
     } else {
       // 创建关系
-      const payload = {
-        to: `http://localhost:7474/db/data/node/${relationForm.targetId}`,
-        type: relationForm.type,
-        data: properties
+      // 确保ID是字符串类型
+      const sourceId = String(relationForm.sourceId)
+      const targetId = String(relationForm.targetId)
+      
+      if (!sourceId || sourceId === 'undefined' || sourceId === 'null') {
+        throw new Error('起始节点ID无效')
       }
       
-      const relRes = await relationshipApi.createRelationship(relationForm.sourceId, payload)
+      if (!targetId || targetId === 'undefined' || targetId === 'null') {
+        throw new Error('目标节点ID无效')
+      }
+      
+      const relRes = await relationshipApi.createRelationship(sourceId, targetId, relationForm.type, properties)
       // 从返回的 self URL 中提取新关系的 ID
       relationIdToUpdate = relRes.data.self.split('/').pop()
     }
@@ -588,7 +648,20 @@ const submitForm = async () => {
         }
     }
 
-    ElMessage.success(isEdit.value ? '关系更新成功' : '关系创建成功')
+    if (isEdit.value) {
+      ElMessage.success('关系更新成功')
+    } else {
+      const sourceNode = nodes.value.find(n => n.id === relationForm.sourceId)
+      const targetNode = nodes.value.find(n => n.id === relationForm.targetId)
+      const sourceLabel = sourceNode ? getNodeLabel(sourceNode) : `ID: ${relationForm.sourceId}`
+      const targetLabel = targetNode ? getNodeLabel(targetNode) : `ID: ${relationForm.targetId}`
+      
+      ElMessage.success({
+        message: `关系创建成功：${sourceLabel} -[${relationForm.type}]-> ${targetLabel}`,
+        duration: 4000
+      })
+    }
+    
     dialogVisible.value = false
     fetchRelationships()
 
