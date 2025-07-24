@@ -390,10 +390,17 @@ const chartInstances = ref({})
 
 // 设置图表引用
 const setChartRef = (el, relationshipId, propertyName) => {
+  const key = `${relationshipId}_${propertyName}`
+  
   if (el) {
-    const key = `${relationshipId}_${propertyName}`
     chartRefs.value[key] = el
     console.log(`设置图表引用 ${key}:`, el)
+  } else {
+    // 当元素被移除时，清理引用
+    if (chartRefs.value[key]) {
+      console.log(`清理图表引用 ${key}`)
+      delete chartRefs.value[key]
+    }
   }
 }
 
@@ -821,6 +828,28 @@ onUnmounted(() => {
   chartInstances.value = {}
 })
 
+// 清理特定关系的图表实例
+const cleanupRelationshipCharts = (relationshipId) => {
+  console.log(`清理关系 ${relationshipId} 的图表实例`)
+  
+  // 查找并清理该关系的所有图表实例
+  Object.keys(chartInstances.value).forEach(key => {
+    if (key.startsWith(`${relationshipId}_`)) {
+      const chart = chartInstances.value[key]
+      if (chart && typeof chart.dispose === 'function') {
+        console.log(`销毁图表实例: ${key}`)
+        // 清理resize事件监听器
+        if (chart._resizeHandler) {
+          window.removeEventListener('resize', chart._resizeHandler)
+        }
+        chart.dispose()
+      }
+      delete chartInstances.value[key]
+      delete chartRefs.value[key]
+    }
+  })
+}
+
 // 查询时态数据
 const queryTemporalData = async (relationship) => {
   if (!globalTimeRange.startTime || !globalTimeRange.endTime) {
@@ -831,6 +860,9 @@ const queryTemporalData = async (relationship) => {
   console.log('开始查询时态数据，关系ID:', relationship.id)
   console.log('时间范围:', globalTimeRange.startTime, '到', globalTimeRange.endTime)
   console.log('时态属性列表:', relationship.temporalProperties)
+  
+  // 清理该关系之前的图表实例和引用
+  cleanupRelationshipCharts(relationship.id)
   
   relationship.temporalLoading = true
   relationship.temporalCharts = []
@@ -857,6 +889,7 @@ const queryTemporalData = async (relationship) => {
         const chartData = Object.entries(data).map(([timeStr, value]) => {
           // 将时间字符串转换为更易读的格式
           const timeFormatted = parseTimeString(timeStr)
+          console.log(`时间转换: ${timeStr} -> ${timeFormatted}`)
           return {
             time: timeFormatted,
             value: value,
@@ -889,10 +922,13 @@ const queryTemporalData = async (relationship) => {
     await nextTick()
     console.log('DOM更新完成，开始渲染图表')
     
-    relationship.temporalCharts.forEach((chart, index) => {
-      console.log(`渲染第 ${index + 1} 个图表:`, chart.propertyName)
-      renderChart(relationship.id, chart)
-    })
+    // 添加延迟确保DOM完全渲染
+    setTimeout(() => {
+      relationship.temporalCharts.forEach((chart, index) => {
+        console.log(`渲染第 ${index + 1} 个图表:`, chart.propertyName)
+        renderChart(relationship.id, chart)
+      })
+    }, 100)
     
     if (relationship.temporalCharts.length === 0) {
       ElMessage.info('在指定时间范围内没有找到时态属性数据')
@@ -911,10 +947,16 @@ const queryTemporalData = async (relationship) => {
 // 解析时间字符串（例如：5010010 -> 2010-05-01 00:10）
 const parseTimeString = (timeStr) => {
   if (timeStr.length === 7) {
-    const month = timeStr.substring(0, 2)
-    const day = timeStr.substring(2, 4)
-    const hour = timeStr.substring(4, 6)
-    const minute = timeStr.substring(6, 8)
+    // 5010010 格式解析：
+    // 位置 0: 月份 (5 = 05月)
+    // 位置 1-2: 日期 (01)
+    // 位置 3-4: 小时 (00)
+    // 位置 5-6: 分钟 (10)
+    const month = timeStr.substring(0, 1).padStart(2, '0') // 第1位是月份，补零
+    const day = timeStr.substring(1, 3) // 第2-3位是日期
+    const hour = timeStr.substring(3, 5) // 第4-5位是小时
+    const minute = timeStr.substring(5, 7) // 第6-7位是分钟
+    
     return `2010-${month}-${day} ${hour}:${minute}`
   }
   return timeStr
@@ -930,9 +972,9 @@ const renderChart = (relationshipId, chartData) => {
   
   if (!chartElement) {
     console.warn(`找不到图表元素: ${key}`)
-    // 延迟一点时间再试，最多重试5次
+    // 延迟一点时间再试，最多重试8次
     let retryCount = 0
-    const maxRetries = 5
+    const maxRetries = 8
     
     const retryRender = () => {
       setTimeout(() => {
@@ -940,30 +982,29 @@ const renderChart = (relationshipId, chartData) => {
         const retryElement = chartRefs.value[key]
         console.log(`第 ${retryCount} 次重试查找图表元素 ${key}:`, retryElement)
         
-        if (retryElement) {
+        if (retryElement && retryElement.offsetParent !== null) { // 确保元素在DOM中且可见
           doRender(retryElement, relationshipId, chartData)
         } else if (retryCount < maxRetries) {
           retryRender()
         } else {
           console.error(`经过 ${maxRetries} 次重试仍然找不到图表元素: ${key}`)
         }
-      }, 200 * retryCount) // 递增延迟
+      }, 100 + (50 * retryCount)) // 递增延迟：100ms, 150ms, 200ms...
     }
     
     retryRender()
     return
   }
   
-  // 立即渲染，但也设置一个延迟渲染作为备份
-  doRender(chartElement, relationshipId, chartData)
+  // 检查元素是否在DOM中且可见
+  if (chartElement.offsetParent === null) {
+    console.warn(`图表元素 ${key} 不可见，延迟渲染`)
+    setTimeout(() => renderChart(relationshipId, chartData), 200)
+    return
+  }
   
-  // 备份渲染：确保DOM完全加载后再次尝试
-  setTimeout(() => {
-    const element = chartRefs.value[key]
-    if (element) {
-      doRender(element, relationshipId, chartData)
-    }
-  }, 500)
+  // 立即渲染
+  doRender(chartElement, relationshipId, chartData)
 }
 
 // 实际渲染图表的函数
@@ -1005,10 +1046,6 @@ const doRender = (chartElement, relationshipId, chartData) => {
     if (!chartData.data || chartData.data.length === 0) {
       console.warn('图表数据为空')
       const option = {
-        title: {
-          text: `${chartData.propertyName} 时态变化 (无数据)`,
-          left: 'center'
-        },
         xAxis: {
           type: 'category',
           data: []
@@ -1020,7 +1057,14 @@ const doRender = (chartElement, relationshipId, chartData) => {
           name: chartData.propertyName,
           type: 'line',
           data: []
-        }]
+        }],
+        grid: {
+          left: '10%',
+          right: '10%',
+          bottom: '20%',
+          top: '10%',
+          containLabel: true
+        }
       }
       chart.setOption(option)
       return
@@ -1034,13 +1078,6 @@ const doRender = (chartElement, relationshipId, chartData) => {
     console.log('Y轴数据:', seriesData)
     
     const option = {
-      title: {
-        text: `${chartData.propertyName} 时态变化`,
-        left: 'center',
-        textStyle: {
-          fontSize: 14
-        }
-      },
       tooltip: {
         trigger: 'axis',
         formatter: function(params) {
@@ -1082,7 +1119,7 @@ const doRender = (chartElement, relationshipId, chartData) => {
         left: '10%',
         right: '10%',
         bottom: '20%',
-        top: '15%',
+        top: '10%',  // 减少顶部空间，因为没有标题了
         containLabel: true
       },
       animation: true,
