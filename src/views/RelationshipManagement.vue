@@ -105,7 +105,7 @@
                     <div 
                       :ref="el => setChartRef(el, props.row.id, chart.propertyName)"
                       class="chart"
-                      :style="{ width: '100%', height: '300px' }"
+                      :style="{ width: '100%', height: '150px' }"
                       :id="`chart-${props.row.id}-${chart.propertyName}`"
                     ></div>
                   </div>
@@ -1031,14 +1031,14 @@ const doRender = (chartElement, relationshipId, chartData) => {
     if (chartElement.offsetWidth === 0 || chartElement.offsetHeight === 0) {
       console.warn('图表容器尺寸为0，强制设置尺寸')
       chartElement.style.width = '100%'
-      chartElement.style.height = '300px'
-      chartElement.style.minHeight = '300px'
+      chartElement.style.height = '150px'
+      chartElement.style.minHeight = '150px'
     }
     
     // 创建新的图表实例
     const chart = echarts.init(chartElement, null, {
       width: chartElement.offsetWidth || 800,
-      height: chartElement.offsetHeight || 300
+      height: chartElement.offsetHeight || 150
     })
     chartInstances.value[key] = chart
     
@@ -1371,8 +1371,8 @@ const doRender = (chartElement, relationshipId, chartData) => {
   border: 1px solid #ebeef5;
   border-radius: 4px;
   width: 100% !important;
-  height: 300px !important;
-  min-height: 300px !important;
+  height: 150px !important;
+  min-height: 150px !important;
 }
 
 .temporal-properties-list {
