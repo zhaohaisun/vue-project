@@ -4,11 +4,34 @@
       <template #header>
         <div class="card-header">
           <span>关系管理</span>
-          <div>
-            <el-tooltip content="刷新" placement="top">
-              <el-button :icon="Refresh" circle @click="fetchRelationships" />
-            </el-tooltip>
-            <el-button type="primary" @click="openAddDialog">创建关系</el-button>
+          <div class="header-controls">
+            <!-- 时间范围输入控件 -->
+            <div class="time-range-controls">
+              <el-form :inline="true" class="time-form">
+                <el-form-item label="时间范围:">
+                  <el-input
+                    v-model="globalTimeRange.startTime"
+                    placeholder="开始时间 (如: 05010005)"
+                    style="width: 120px"
+                    class="time-input"
+                  />
+                  <span class="time-separator">至</span>
+                  <el-input
+                    v-model="globalTimeRange.endTime"
+                    placeholder="结束时间 (如: 05010540)"
+                    style="width: 120px"
+                    class="time-input"
+                  />
+                </el-form-item>
+              </el-form>
+            </div>
+            
+            <div class="action-buttons">
+              <el-tooltip content="刷新" placement="top">
+                <el-button :icon="Refresh" circle @click="fetchRelationships" />
+              </el-tooltip>
+              <el-button type="primary" @click="openAddDialog">创建关系</el-button>
+            </div>
           </div>
         </div>
       </template>
@@ -51,6 +74,56 @@
                   {{ value }}
                 </el-descriptions-item>
               </el-descriptions>
+              
+              <!-- 时态属性展示区域 -->
+              <div v-if="props.row.temporalProperties && props.row.temporalProperties.length > 0" class="temporal-properties-section">
+                <el-divider content-position="left">时态属性</el-divider>
+                
+                <!-- 查询按钮 -->
+                <div class="temporal-controls">
+                  <el-button 
+                    type="primary" 
+                    @click="queryTemporalData(props.row)"
+                    :loading="props.row.temporalLoading"
+                    :disabled="!globalTimeRange.startTime || !globalTimeRange.endTime"
+                  >
+                    查询时态数据
+                  </el-button>
+                  <span v-if="!globalTimeRange.startTime || !globalTimeRange.endTime" class="time-hint">
+                    请在页面右上角输入时间范围
+                  </span>
+                </div>
+                
+                <!-- 时态属性图表 -->
+                <div v-if="props.row.temporalCharts && props.row.temporalCharts.length > 0" class="temporal-charts">
+                  <div 
+                    v-for="(chart, index) in props.row.temporalCharts" 
+                    :key="`chart-${props.row.id}-${chart.propertyName}`" 
+                    class="chart-container"
+                  >
+                    <h4>{{ chart.propertyName }} 时间变化图</h4>
+                    <div 
+                      :ref="el => setChartRef(el, props.row.id, chart.propertyName)"
+                      class="chart"
+                      :style="{ width: '100%', height: '300px' }"
+                      :id="`chart-${props.row.id}-${chart.propertyName}`"
+                    ></div>
+                  </div>
+                </div>
+                
+                <!-- 时态属性列表 -->
+                <div class="temporal-properties-list">
+                  <h4>时态属性列表:</h4>
+                  <el-tag 
+                    v-for="property in props.row.temporalProperties" 
+                    :key="property" 
+                    type="info" 
+                    class="temporal-property-tag"
+                  >
+                    {{ property }}
+                  </el-tag>
+                </div>
+              </div>
             </el-card>
           </template>
         </el-table-column>
@@ -301,14 +374,28 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Refresh, Edit, Delete, Plus, Clock } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { nodeApi, relationshipApi } from '../api'
+import * as echarts from 'echarts'
 
 // 数据加载状态
 const loading = ref(false)
 const submitLoading = ref(false)
+
+// 图表引用管理
+const chartRefs = ref({})
+const chartInstances = ref({})
+
+// 设置图表引用
+const setChartRef = (el, relationshipId, propertyName) => {
+  if (el) {
+    const key = `${relationshipId}_${propertyName}`
+    chartRefs.value[key] = el
+    console.log(`设置图表引用 ${key}:`, el)
+  }
+}
 
 // 表格数据和过滤
 const relationships = ref([])
@@ -321,6 +408,12 @@ const totalRelationships = ref(0)
 // 搜索表单
 const searchForm = reactive({
   type: ''
+})
+
+// 全局时间范围
+const globalTimeRange = reactive({
+  startTime: '',
+  endTime: ''
 })
 
 // 过滤后的关系
@@ -437,7 +530,10 @@ const fetchRelationships = async () => {
         sourceLabels: [], // 暂时为空，后续会填充
         targetLabels: [], // 暂时为空，后续会填充
         properties: rel.data || {},
-        self: rel.self
+        self: rel.self,
+        temporalProperties: [], // 时态属性列表
+        temporalLoading: false, // 时态数据加载状态
+        temporalCharts: [] // 时态图表数据
       })
     }
     
@@ -453,6 +549,15 @@ const fetchRelationships = async () => {
         
         rel.sourceLabels = sourceNode?.labels || []
         rel.targetLabels = targetNode?.labels || []
+        
+        // 获取关系的时态属性
+        try {
+          const temporalRes = await relationshipApi.getRelationshipTemporalProperties(rel.id)
+          rel.temporalProperties = temporalRes.data || []
+        } catch (error) {
+          console.warn(`获取关系 ${rel.id} 的时态属性失败:`, error)
+          rel.temporalProperties = []
+        }
       }
     }
     
@@ -701,6 +806,314 @@ const handleDelete = (row) => {
 onMounted(() => {
   fetchRelationships()
 })
+
+// 页面卸载时清理图表实例
+onUnmounted(() => {
+  Object.values(chartInstances.value).forEach(chart => {
+    if (chart && typeof chart.dispose === 'function') {
+      // 清理resize事件监听器
+      if (chart._resizeHandler) {
+        window.removeEventListener('resize', chart._resizeHandler)
+      }
+      chart.dispose()
+    }
+  })
+  chartInstances.value = {}
+})
+
+// 查询时态数据
+const queryTemporalData = async (relationship) => {
+  if (!globalTimeRange.startTime || !globalTimeRange.endTime) {
+    ElMessage.warning('请在页面右上角输入时间范围')
+    return
+  }
+  
+  console.log('开始查询时态数据，关系ID:', relationship.id)
+  console.log('时间范围:', globalTimeRange.startTime, '到', globalTimeRange.endTime)
+  console.log('时态属性列表:', relationship.temporalProperties)
+  
+  relationship.temporalLoading = true
+  relationship.temporalCharts = []
+  
+  try {
+    const startTime = globalTimeRange.startTime
+    const endTime = globalTimeRange.endTime
+    
+    // 为每个时态属性查询数据
+    const chartPromises = relationship.temporalProperties.map(async (property) => {
+      try {
+        console.log(`查询时态属性: ${property}`)
+        const response = await relationshipApi.getRelationshipTemporalPropertyRange(
+          relationship.id,
+          property,
+          startTime,
+          endTime
+        )
+        
+        console.log(`属性 ${property} 响应数据:`, response.data)
+        const data = response.data || {}
+        
+        // 转换时间格式和数据
+        const chartData = Object.entries(data).map(([timeStr, value]) => {
+          // 将时间字符串转换为更易读的格式
+          const timeFormatted = parseTimeString(timeStr)
+          return {
+            time: timeFormatted,
+            value: value,
+            originalTime: timeStr
+          }
+        }).sort((a, b) => a.originalTime.localeCompare(b.originalTime))
+        
+        console.log(`属性 ${property} 转换后的图表数据:`, chartData)
+        
+        return {
+          propertyName: property,
+          data: chartData
+        }
+      } catch (error) {
+        console.error(`查询时态属性 ${property} 失败:`, error)
+        return {
+          propertyName: property,
+          data: []
+        }
+      }
+    })
+    
+    const chartsData = await Promise.all(chartPromises)
+    console.log('所有图表数据:', chartsData)
+    
+    relationship.temporalCharts = chartsData.filter(chart => chart.data.length > 0)
+    console.log('过滤后的图表数据:', relationship.temporalCharts)
+    
+    // 等待DOM更新后绘制图表
+    await nextTick()
+    console.log('DOM更新完成，开始渲染图表')
+    
+    relationship.temporalCharts.forEach((chart, index) => {
+      console.log(`渲染第 ${index + 1} 个图表:`, chart.propertyName)
+      renderChart(relationship.id, chart)
+    })
+    
+    if (relationship.temporalCharts.length === 0) {
+      ElMessage.info('在指定时间范围内没有找到时态属性数据')
+    } else {
+      ElMessage.success(`成功生成 ${relationship.temporalCharts.length} 个时态属性图表`)
+    }
+    
+  } catch (error) {
+    console.error('查询时态数据失败:', error)
+    ElMessage.error('查询时态数据失败: ' + (error.message || '未知错误'))
+  } finally {
+    relationship.temporalLoading = false
+  }
+}
+
+// 解析时间字符串（例如：5010010 -> 2010-05-01 00:10）
+const parseTimeString = (timeStr) => {
+  if (timeStr.length === 7) {
+    const month = timeStr.substring(0, 2)
+    const day = timeStr.substring(2, 4)
+    const hour = timeStr.substring(4, 6)
+    const minute = timeStr.substring(6, 8)
+    return `2010-${month}-${day} ${hour}:${minute}`
+  }
+  return timeStr
+}
+
+// 渲染图表
+const renderChart = (relationshipId, chartData) => {
+  const key = `${relationshipId}_${chartData.propertyName}`
+  console.log(`尝试渲染图表，key: ${key}`)
+  
+  const chartElement = chartRefs.value[key]
+  console.log('图表元素:', chartElement)
+  
+  if (!chartElement) {
+    console.warn(`找不到图表元素: ${key}`)
+    // 延迟一点时间再试，最多重试5次
+    let retryCount = 0
+    const maxRetries = 5
+    
+    const retryRender = () => {
+      setTimeout(() => {
+        retryCount++
+        const retryElement = chartRefs.value[key]
+        console.log(`第 ${retryCount} 次重试查找图表元素 ${key}:`, retryElement)
+        
+        if (retryElement) {
+          doRender(retryElement, relationshipId, chartData)
+        } else if (retryCount < maxRetries) {
+          retryRender()
+        } else {
+          console.error(`经过 ${maxRetries} 次重试仍然找不到图表元素: ${key}`)
+        }
+      }, 200 * retryCount) // 递增延迟
+    }
+    
+    retryRender()
+    return
+  }
+  
+  // 立即渲染，但也设置一个延迟渲染作为备份
+  doRender(chartElement, relationshipId, chartData)
+  
+  // 备份渲染：确保DOM完全加载后再次尝试
+  setTimeout(() => {
+    const element = chartRefs.value[key]
+    if (element) {
+      doRender(element, relationshipId, chartData)
+    }
+  }, 500)
+}
+
+// 实际渲染图表的函数
+const doRender = (chartElement, relationshipId, chartData) => {
+  const key = `${relationshipId}_${chartData.propertyName}`
+  
+  // 如果已存在图表实例，先销毁
+  if (chartInstances.value[key]) {
+    console.log(`销毁已存在的图表实例: ${key}`)
+    chartInstances.value[key].dispose()
+  }
+  
+  console.log(`创建新的图表实例: ${key}`)
+  console.log('图表数据:', chartData)
+  console.log('图表元素尺寸:', {
+    width: chartElement.offsetWidth,
+    height: chartElement.offsetHeight,
+    clientWidth: chartElement.clientWidth,
+    clientHeight: chartElement.clientHeight
+  })
+  
+  try {
+    // 确保容器有明确的尺寸
+    if (chartElement.offsetWidth === 0 || chartElement.offsetHeight === 0) {
+      console.warn('图表容器尺寸为0，强制设置尺寸')
+      chartElement.style.width = '100%'
+      chartElement.style.height = '300px'
+      chartElement.style.minHeight = '300px'
+    }
+    
+    // 创建新的图表实例
+    const chart = echarts.init(chartElement, null, {
+      width: chartElement.offsetWidth || 800,
+      height: chartElement.offsetHeight || 300
+    })
+    chartInstances.value[key] = chart
+    
+    // 检查数据是否有效
+    if (!chartData.data || chartData.data.length === 0) {
+      console.warn('图表数据为空')
+      const option = {
+        title: {
+          text: `${chartData.propertyName} 时态变化 (无数据)`,
+          left: 'center'
+        },
+        xAxis: {
+          type: 'category',
+          data: []
+        },
+        yAxis: {
+          type: 'value'
+        },
+        series: [{
+          name: chartData.propertyName,
+          type: 'line',
+          data: []
+        }]
+      }
+      chart.setOption(option)
+      return
+    }
+    
+    // 准备图表数据
+    const xAxisData = chartData.data.map(item => item.time)
+    const seriesData = chartData.data.map(item => item.value)
+    
+    console.log('X轴数据:', xAxisData)
+    console.log('Y轴数据:', seriesData)
+    
+    const option = {
+      title: {
+        text: `${chartData.propertyName} 时态变化`,
+        left: 'center',
+        textStyle: {
+          fontSize: 14
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(params) {
+          if (params && params.length > 0) {
+            const point = params[0]
+            return `时间: ${point.name}<br/>值: ${point.value}`
+          }
+          return ''
+        }
+      },
+      xAxis: {
+        type: 'category',
+        data: xAxisData,
+        axisLabel: {
+          rotate: 45,
+          fontSize: 10,
+          interval: 0
+        }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          fontSize: 10
+        }
+      },
+      series: [{
+        name: chartData.propertyName,
+        type: 'line',
+        data: seriesData,
+        smooth: true,
+        lineStyle: {
+          width: 2,
+          color: '#409eff'
+        },
+        symbolSize: 4,
+        symbol: 'circle'
+      }],
+      grid: {
+        left: '10%',
+        right: '10%',
+        bottom: '20%',
+        top: '15%',
+        containLabel: true
+      },
+      animation: true,
+      animationDuration: 1000
+    }
+    
+    console.log('最终图表配置:', option)
+    chart.setOption(option, true)  // 第二个参数true表示不合并，完全替换
+    
+    // 强制重绘
+    setTimeout(() => {
+      chart.resize()
+    }, 100)
+    
+    console.log(`图表 ${key} 渲染完成`)
+    
+    // 监听窗口大小变化
+    const resizeHandler = () => {
+      if (chart && !chart.isDisposed()) {
+        chart.resize()
+      }
+    }
+    window.addEventListener('resize', resizeHandler)
+    
+    // 存储resize处理器，以便后续清理
+    chart._resizeHandler = resizeHandler
+    
+  } catch (error) {
+    console.error(`渲染图表 ${key} 时发生错误:`, error)
+  }
+}
 </script>
 
 <style scoped>
@@ -716,6 +1129,47 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.time-range-controls {
+  display: flex;
+  align-items: center;
+}
+
+.time-form {
+  margin: 0;
+}
+
+.time-form :deep(.el-form-item) {
+  margin: 0;
+}
+
+.time-form :deep(.el-form-item__label) {
+  font-size: 14px;
+  color: #606266;
+  margin-right: 8px;
+}
+
+.time-input {
+  font-size: 12px;
+}
+
+.time-separator {
+  margin: 0 8px;
+  color: #909399;
+  font-size: 14px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .search-form {
@@ -827,5 +1281,79 @@ onMounted(() => {
 
 :deep(.el-form-item__label) {
   font-weight: 500;
+}
+
+/* 时态属性相关样式 */
+.temporal-properties-section {
+  margin-top: 20px;
+}
+
+.temporal-controls {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.time-hint {
+  color: #909399;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.temporal-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.temporal-charts {
+  margin-bottom: 20px;
+}
+
+.chart-container {
+  margin-bottom: 30px;
+  padding: 15px;
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  background-color: #fff;
+}
+
+.chart-container h4 {
+  margin: 0 0 15px 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.chart {
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+  width: 100% !important;
+  height: 300px !important;
+  min-height: 300px !important;
+}
+
+.temporal-properties-list {
+  padding: 15px;
+  background-color: #f0f9ff;
+  border-radius: 6px;
+  border-left: 4px solid #409eff;
+}
+
+.temporal-properties-list h4 {
+  margin: 0 0 10px 0;
+  color: #409eff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.temporal-property-tag {
+  margin-right: 8px;
+  margin-bottom: 8px;
 }
 </style> 

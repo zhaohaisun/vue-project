@@ -226,6 +226,16 @@ export const relationshipApi = {
     return apiClient.delete(`/db/data/relationship/${id}`)
   },
   
+  // 获取关系的时态属性列表
+  getRelationshipTemporalProperties(id) {
+    return apiClient.get(`/db/data/relationship/${id}/temporal`)
+  },
+  
+  // 获取关系的时态属性值范围
+  getRelationshipTemporalPropertyRange(id, key, startTime, endTime) {
+    return apiClient.get(`/db/data/relationship/${id}/temporal/${key}/${startTime}/${endTime}`)
+  },
+  
   // 获取关系属性
   getRelationshipProperties(id) {
     return apiClient.get(`/db/data/relationship/${id}/properties`)
