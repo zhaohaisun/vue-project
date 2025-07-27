@@ -114,14 +114,37 @@
                 <!-- 时态属性列表 -->
                 <div class="temporal-properties-list">
                   <h4>时态属性列表:</h4>
-                  <el-tag 
-                    v-for="property in props.row.temporalProperties" 
-                    :key="property" 
-                    type="info" 
-                    class="temporal-property-tag"
-                  >
-                    {{ property }}
-                  </el-tag>
+                  <div class="temporal-property-item" v-for="property in props.row.temporalProperties" :key="property">
+                    <el-tag 
+                      type="info" 
+                      class="temporal-property-tag"
+                    >
+                      {{ property }}
+                    </el-tag>
+                    <div class="temporal-property-actions">
+                      <el-button 
+                        size="small" 
+                        type="primary" 
+                        @click="openSetTemporalPropertyDialog(props.row.id, property)"
+                      >
+                        设置值
+                      </el-button>
+                      <el-button 
+                        size="small" 
+                        type="warning" 
+                        @click="openSetTemporalRangeDialog(props.row.id, property)"
+                      >
+                        设置范围
+                      </el-button>
+                      <el-button 
+                        size="small" 
+                        type="danger" 
+                        @click="deleteTemporalProperty(props.row.id, property)"
+                      >
+                        删除
+                      </el-button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </el-card>
@@ -370,6 +393,82 @@
         </span>
       </template>
     </el-dialog>
+
+    <!-- 设置时态属性值对话框 -->
+    <el-dialog
+      v-model="setTemporalPropertyDialogVisible"
+      title="设置时态属性值"
+      width="500px"
+      @close="resetTemporalPropertyForm"
+    >
+      <el-form ref="temporalPropertyFormRef" :model="temporalPropertyForm" label-width="100px">
+        <el-form-item label="关系ID">
+          <el-input v-model="temporalPropertyForm.relationshipId" disabled />
+        </el-form-item>
+        <el-form-item label="属性名">
+          <el-input v-model="temporalPropertyForm.propertyKey" disabled />
+        </el-form-item>
+        <el-form-item label="时间" prop="time" :rules="{ required: true, message: '请输入时间', trigger: 'blur' }">
+          <el-input 
+            v-model="temporalPropertyForm.time" 
+            placeholder="请输入时间 (如: 5010105)"
+          />
+          <div class="form-hint">时间格式：7位数字，如 5010105 表示 2010年05月01日 01:05</div>
+        </el-form-item>
+        <el-form-item label="属性值" prop="value" :rules="{ required: true, message: '请输入属性值', trigger: 'blur' }">
+          <el-input v-model="temporalPropertyForm.value" placeholder="请输入属性值" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="setTemporalPropertyDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitSetTemporalProperty" :loading="temporalPropertyLoading">
+            确认
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
+    <!-- 设置时态属性范围对话框 -->
+    <el-dialog
+      v-model="setTemporalRangeDialogVisible"
+      title="设置时态属性范围"
+      width="500px"
+      @close="resetTemporalRangeForm"
+    >
+      <el-form ref="temporalRangeFormRef" :model="temporalRangeForm" label-width="100px">
+        <el-form-item label="关系ID">
+          <el-input v-model="temporalRangeForm.relationshipId" disabled />
+        </el-form-item>
+        <el-form-item label="属性名">
+          <el-input v-model="temporalRangeForm.propertyKey" disabled />
+        </el-form-item>
+        <el-form-item label="开始时间" prop="startTime" :rules="{ required: true, message: '请输入开始时间', trigger: 'blur' }">
+          <el-input 
+            v-model="temporalRangeForm.startTime" 
+            placeholder="请输入开始时间 (如: 5010010)"
+          />
+        </el-form-item>
+        <el-form-item label="结束时间" prop="endTime" :rules="{ required: true, message: '请输入结束时间', trigger: 'blur' }">
+          <el-input 
+            v-model="temporalRangeForm.endTime" 
+            placeholder="请输入结束时间 (如: 5010540)"
+          />
+        </el-form-item>
+        <el-form-item label="属性值" prop="value" :rules="{ required: true, message: '请输入属性值', trigger: 'blur' }">
+          <el-input v-model="temporalRangeForm.value" placeholder="请输入属性值" />
+        </el-form-item>
+        <div class="form-hint">时间格式：7位数字，如 5010010 表示 2010年05月01日 00:10</div>
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="setTemporalRangeDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="submitSetTemporalRange" :loading="temporalRangeLoading">
+            确认
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -448,6 +547,32 @@ const relationForm = reactive({
   properties: [{ key: '', value: '' }],
   temporalProperties: [{ key: '', value: '', time: null, isRange: false }]
 })
+
+// 时态属性管理对话框状态
+const setTemporalPropertyDialogVisible = ref(false)
+const setTemporalRangeDialogVisible = ref(false)
+const temporalPropertyLoading = ref(false)
+const temporalRangeLoading = ref(false)
+
+// 时态属性表单
+const temporalPropertyForm = reactive({
+  relationshipId: '',
+  propertyKey: '',
+  time: '',
+  value: ''
+})
+
+const temporalRangeForm = reactive({
+  relationshipId: '',
+  propertyKey: '',
+  startTime: '',
+  endTime: '',
+  value: ''
+})
+
+// 表单引用
+const temporalPropertyFormRef = ref(null)
+const temporalRangeFormRef = ref(null)
 
 // 表单验证规则
 const rules = {
@@ -1151,6 +1276,136 @@ const doRender = (chartElement, relationshipId, chartData) => {
     console.error(`渲染图表 ${key} 时发生错误:`, error)
   }
 }
+
+// 时态属性管理方法
+const openSetTemporalPropertyDialog = (relationshipId, propertyKey) => {
+  console.log('打开设置时态属性对话框:', relationshipId, propertyKey)
+  temporalPropertyForm.relationshipId = relationshipId
+  temporalPropertyForm.propertyKey = propertyKey
+  temporalPropertyForm.time = ''
+  temporalPropertyForm.value = ''
+  setTemporalPropertyDialogVisible.value = true
+}
+
+const openSetTemporalRangeDialog = (relationshipId, propertyKey) => {
+  console.log('打开设置时态属性范围对话框:', relationshipId, propertyKey)
+  temporalRangeForm.relationshipId = relationshipId
+  temporalRangeForm.propertyKey = propertyKey
+  temporalRangeForm.startTime = ''
+  temporalRangeForm.endTime = ''
+  temporalRangeForm.value = ''
+  setTemporalRangeDialogVisible.value = true
+}
+
+const resetTemporalPropertyForm = () => {
+  temporalPropertyForm.relationshipId = ''
+  temporalPropertyForm.propertyKey = ''
+  temporalPropertyForm.time = ''
+  temporalPropertyForm.value = ''
+}
+
+const resetTemporalRangeForm = () => {
+  temporalRangeForm.relationshipId = ''
+  temporalRangeForm.propertyKey = ''
+  temporalRangeForm.startTime = ''
+  temporalRangeForm.endTime = ''
+  temporalRangeForm.value = ''
+}
+
+const submitSetTemporalProperty = async () => {
+  console.log('提交设置时态属性:', temporalPropertyForm)
+  if (!temporalPropertyFormRef.value) return
+  
+  try {
+    await temporalPropertyFormRef.value.validate()
+    temporalPropertyLoading.value = true
+    
+    console.log('调用API - setTemporalProperty:', {
+      id: temporalPropertyForm.relationshipId,
+      key: temporalPropertyForm.propertyKey,
+      time: temporalPropertyForm.time,
+      value: temporalPropertyForm.value
+    })
+    
+    await relationshipApi.setTemporalProperty(
+      temporalPropertyForm.relationshipId,
+      temporalPropertyForm.propertyKey,
+      temporalPropertyForm.time,
+      temporalPropertyForm.value
+    )
+    
+    ElMessage.success('时态属性设置成功')
+    setTemporalPropertyDialogVisible.value = false
+    
+    // 刷新关系列表
+    await fetchRelationships()
+    
+  } catch (error) {
+    console.error('设置时态属性失败:', error)
+    ElMessage.error('设置时态属性失败: ' + (error.response?.data?.message || error.message))
+  } finally {
+    temporalPropertyLoading.value = false
+  }
+}
+
+const submitSetTemporalRange = async () => {
+  if (!temporalRangeFormRef.value) return
+  
+  try {
+    await temporalRangeFormRef.value.validate()
+    temporalRangeLoading.value = true
+    
+    await relationshipApi.setTemporalPropertyRange(
+      temporalRangeForm.relationshipId,
+      temporalRangeForm.propertyKey,
+      temporalRangeForm.startTime,
+      temporalRangeForm.endTime,
+      temporalRangeForm.value
+    )
+    
+    ElMessage.success('时态属性范围设置成功')
+    setTemporalRangeDialogVisible.value = false
+    
+    // 刷新关系列表
+    await fetchRelationships()
+    
+  } catch (error) {
+    console.error('设置时态属性范围失败:', error)
+    ElMessage.error('设置时态属性范围失败: ' + (error.response?.data?.message || error.message))
+  } finally {
+    temporalRangeLoading.value = false
+  }
+}
+
+const deleteTemporalProperty = async (relationshipId, propertyKey) => {
+  console.log('删除时态属性:', relationshipId, propertyKey)
+  try {
+    await ElMessageBox.confirm(
+      `确认删除关系 ${relationshipId} 的时态属性 "${propertyKey}" 吗？此操作不可恢复。`,
+      '确认删除',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    console.log('调用API - deleteTemporalProperty:', { id: relationshipId, key: propertyKey })
+    await relationshipApi.deleteTemporalProperty(relationshipId, propertyKey)
+    ElMessage.success('时态属性删除成功')
+    
+    // 刷新关系列表
+    await fetchRelationships()
+    
+  } catch (error) {
+    if (error === 'cancel') {
+      console.log('用户取消删除操作')
+      return
+    }
+    console.error('删除时态属性失败:', error)
+    ElMessage.error('删除时态属性失败: ' + (error.response?.data?.message || error.message))
+  }
+}
 </script>
 
 <style scoped>
@@ -1392,5 +1647,40 @@ const doRender = (chartElement, relationshipId, chartData) => {
 .temporal-property-tag {
   margin-right: 8px;
   margin-bottom: 8px;
+}
+
+.temporal-property-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.temporal-property-item:last-child {
+  border-bottom: none;
+}
+
+.temporal-property-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.temporal-property-actions .el-button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.form-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style> 
