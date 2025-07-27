@@ -1075,31 +1075,63 @@ const doRender = (chartElement, nodeId, chartData) => {
       return
     }
     
-    // 准备图表数据
-    const xAxisData = chartData.data.map(item => item.time)
-    const seriesData = chartData.data.map(item => item.value)
+    // 准备图表数据：排序并转换为时间戳格式
+    const sortedData = [...chartData.data].sort((a, b) => {
+      const timeA = parseTimeString(a.time)
+      const timeB = parseTimeString(b.time)
+      return new Date(timeA).getTime() - new Date(timeB).getTime()
+    })
     
-    console.log('X轴数据:', xAxisData)
-    console.log('Y轴数据:', seriesData)
+    // 将数据转换为 [timestamp, value] 格式
+    const seriesData = sortedData.map(item => {
+      const timeStr = parseTimeString(item.time)
+      const timestamp = new Date(timeStr).getTime()
+      return [timestamp, item.value]
+    })
     
+    console.log('转换后的时间戳数据:', seriesData)
+
     const option = {
       tooltip: {
         trigger: 'axis',
         formatter: function(params) {
           if (params && params.length > 0) {
             const point = params[0]
-            return `时间: ${point.name}<br/>值: ${point.value}`
+            const time = new Date(point.value[0]).toLocaleString('zh-CN', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+            return `时间: ${time}<br/>值: ${point.value[1]}`
           }
           return ''
         }
       },
       xAxis: {
-        type: 'category',
-        data: xAxisData,
+        type: 'time',
         axisLabel: {
+          formatter: function(value) {
+            const date = new Date(value)
+            return date.toLocaleString('zh-CN', {
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          },
           rotate: 45,
           fontSize: 10,
-          interval: 0
+          interval: 'auto' // 自动计算标签间隔
+        },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: '#e0e0e0',
+            width: 1,
+            type: 'dashed'
+          }
         }
       },
       yAxis: {
