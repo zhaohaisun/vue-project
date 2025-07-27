@@ -165,9 +165,19 @@ export const nodeApi = {
   getNodesByLabel(label) {
     return apiClient.get(`/db/data/label/${label}/nodes`)
   },
-  
+
+  // 获取节点的所有时态属性列表
+  getTemporalProperty(id) {
+    return apiClient.get(`/db/data/node/${id}/temporal`)
+  },
+
+  // 获取节点时态属性在指定时间范围内的数据
+  getNodeTemporalPropertyRange(id, key, startTime, endTime) {
+    return apiClient.get(`/db/data/node/${id}/temporal/${key}/${startTime}/${endTime}`)
+  },
+
   // 获取时态属性
-  getTemporalProperty(id, key, time) {
+  getTemporalPropertyAtTime(id, key, time) {
     return apiClient.get(`/db/data/node/${id}/temporal/${key}/${time}`)
   },
   
