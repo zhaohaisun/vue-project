@@ -884,8 +884,10 @@ const submitForm = async () => {
     let relationIdToUpdate = currentRelation.value?.id;
 
     if (isEdit.value) {
-      // 编辑关系：只更新属性
-      await relationshipApi.setRelationshipProperties(relationIdToUpdate, properties)
+      // 编辑关系：逐个设置属性
+      for (const [key, value] of Object.entries(properties)) {
+        await relationshipApi.setRelationshipProperty(relationIdToUpdate, key, value)
+      }
       
     } else {
       // 创建关系
