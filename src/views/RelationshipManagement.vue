@@ -1204,6 +1204,7 @@ const doRender = (chartElement, relationshipId, chartData) => {
         series: [{
           name: chartData.propertyName,
           type: 'line',
+          step: 'end', // 设置为阶梯图，先水平再垂直
           data: []
         }],
         grid: {
@@ -1286,8 +1287,8 @@ const doRender = (chartElement, relationshipId, chartData) => {
       series: [{
         name: chartData.propertyName,
         type: 'line',
+        step: 'end', // 设置为阶梯图，先水平再垂直
         data: seriesData,
-        smooth: true,
         lineStyle: {
           width: 2,
           color: '#409eff'
