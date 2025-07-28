@@ -60,6 +60,7 @@
         border
         style="width: 100%"
         height="calc(100vh - 330px)"
+        row-key="id"
       >
         <el-table-column type="expand">
           <template #default="props">
@@ -94,20 +95,34 @@
                   </span>
                 </div>
                 
-                <!-- 时态属性图表 -->
-                <div v-if="props.row.temporalCharts && props.row.temporalCharts.length > 0" class="temporal-charts">
-                  <div 
-                    v-for="(chart, index) in props.row.temporalCharts" 
-                    :key="`chart-${props.row.id}-${chart.propertyName}`" 
-                    class="chart-container"
-                  >
-                    <h4>{{ chart.propertyName }} 时间变化图</h4>
+                <!-- 时态属性图表容器 - 使用固定高度避免跳跃 -->
+                <div class="temporal-charts-container">
+                  <!-- 时态属性图表 -->
+                  <div class="temporal-charts" v-show="props.row.temporalCharts && props.row.temporalCharts.length > 0">
                     <div 
-                      :ref="el => setChartRef(el, props.row.id, chart.propertyName)"
-                      class="chart"
-                      :style="{ width: '100%', height: '150px' }"
-                      :id="`chart-${props.row.id}-${chart.propertyName}`"
-                    ></div>
+                      v-for="(chart, index) in props.row.temporalCharts" 
+                      :key="`chart-${props.row.id}-${chart.propertyName}`" 
+                      class="chart-container"
+                    >
+                      <h4>{{ chart.propertyName }} 时间变化图</h4>
+                      <div 
+                        :ref="el => setChartRef(el, props.row.id, chart.propertyName)"
+                        class="chart"
+                        :style="{ width: '100%', height: '150px' }"
+                        :id="`chart-${props.row.id}-${chart.propertyName}`"
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  <!-- 加载占位符 -->
+                  <div v-if="props.row.temporalLoading" class="temporal-loading-placeholder">
+                    <el-skeleton :rows="3" animated />
+                    <div class="loading-text">正在查询时态数据...</div>
+                  </div>
+                  
+                  <!-- 空状态提示 -->
+                  <div v-if="!props.row.temporalLoading && (!props.row.temporalCharts || props.row.temporalCharts.length === 0) && props.row.hasQueried" class="temporal-empty-state">
+                    <el-empty description="暂无时态数据" :image-size="60" />
                   </div>
                 </div>
                 
@@ -718,7 +733,8 @@ const fetchRelationships = async () => {
         self: rel.self,
         temporalProperties: [], // 时态属性列表
         temporalLoading: false, // 时态数据加载状态
-        temporalCharts: [] // 时态图表数据
+        temporalCharts: [], // 时态图表数据
+        hasQueried: false // 是否已经查询过时态数据
       })
     }
     
@@ -998,6 +1014,25 @@ const cleanupRelationshipCharts = (relationshipId) => {
   })
 }
 
+// 更新单个关系的时态属性
+const updateRelationshipTemporalProperties = async (relationshipId) => {
+  try {
+    const relationship = relationships.value.find(rel => rel.id === relationshipId)
+    if (!relationship) {
+      console.warn(`找不到关系 ID: ${relationshipId}`)
+      return
+    }
+    
+    // 获取关系的时态属性
+    const temporalRes = await relationshipApi.getRelationshipTemporalProperties(relationshipId)
+    relationship.temporalProperties = temporalRes.data || []
+    
+    console.log(`更新关系 ${relationshipId} 的时态属性:`, relationship.temporalProperties)
+  } catch (error) {
+    console.warn(`获取关系 ${relationshipId} 的时态属性失败:`, error)
+  }
+}
+
 // 查询时态数据
 const queryTemporalData = async (relationship) => {
   if (!globalTimeRange.startTime || !globalTimeRange.endTime) {
@@ -1009,11 +1044,11 @@ const queryTemporalData = async (relationship) => {
   console.log('时间范围:', globalTimeRange.startTime, '到', globalTimeRange.endTime)
   console.log('时态属性列表:', relationship.temporalProperties)
   
-  // 清理该关系之前的图表实例和引用
-  cleanupRelationshipCharts(relationship.id)
+  // 记录当前滚动位置
+  const currentScrollTop = document.documentElement.scrollTop || document.body.scrollTop
   
   relationship.temporalLoading = true
-  relationship.temporalCharts = []
+  relationship.hasQueried = true
   
   try {
     const startTime = globalTimeRange.startTime
@@ -1063,6 +1098,10 @@ const queryTemporalData = async (relationship) => {
     const chartsData = await Promise.all(chartPromises)
     console.log('所有图表数据:', chartsData)
     
+    // 清理该关系之前的图表实例和引用
+    cleanupRelationshipCharts(relationship.id)
+    
+    // 设置新的图表数据
     relationship.temporalCharts = chartsData.filter(chart => chart.data.length > 0)
     console.log('过滤后的图表数据:', relationship.temporalCharts)
     
@@ -1070,11 +1109,31 @@ const queryTemporalData = async (relationship) => {
     await nextTick()
     console.log('DOM更新完成，开始渲染图表')
     
+    // 恢复滚动位置，避免页面跳跃
+    requestAnimationFrame(() => {
+      if (Math.abs((document.documentElement.scrollTop || document.body.scrollTop) - currentScrollTop) > 50) {
+        window.scrollTo({
+          top: currentScrollTop,
+          behavior: 'auto'
+        })
+      }
+    })
+    
     // 添加延迟确保DOM完全渲染
     setTimeout(() => {
       relationship.temporalCharts.forEach((chart, index) => {
         console.log(`渲染第 ${index + 1} 个图表:`, chart.propertyName)
         renderChart(relationship.id, chart)
+      })
+      
+      // 再次确保滚动位置稳定
+      requestAnimationFrame(() => {
+        if (Math.abs((document.documentElement.scrollTop || document.body.scrollTop) - currentScrollTop) > 50) {
+          window.scrollTo({
+            top: currentScrollTop,
+            behavior: 'auto'
+          })
+        }
       })
     }, 100)
     
@@ -1393,8 +1452,8 @@ const submitSetTemporalProperty = async () => {
     ElMessage.success('时态属性设置成功')
     setTemporalPropertyDialogVisible.value = false
     
-    // 刷新关系列表
-    await fetchRelationships()
+    // 只更新该关系的时态属性，而不重新加载整个列表
+    await updateRelationshipTemporalProperties(temporalPropertyForm.relationshipId)
     
   } catch (error) {
     console.error('设置时态属性失败:', error)
@@ -1422,8 +1481,8 @@ const submitSetTemporalRange = async () => {
     ElMessage.success('时态属性范围设置成功')
     setTemporalRangeDialogVisible.value = false
     
-    // 刷新关系列表
-    await fetchRelationships()
+    // 只更新该关系的时态属性，而不重新加载整个列表
+    await updateRelationshipTemporalProperties(temporalRangeForm.relationshipId)
     
   } catch (error) {
     console.error('设置时态属性范围失败:', error)
@@ -1450,8 +1509,8 @@ const deleteTemporalProperty = async (relationshipId, propertyKey) => {
     await relationshipApi.deleteTemporalProperty(relationshipId, propertyKey)
     ElMessage.success('时态属性删除成功')
     
-    // 刷新关系列表
-    await fetchRelationships()
+    // 只更新该关系的时态属性，而不重新加载整个列表
+    await updateRelationshipTemporalProperties(relationshipId)
     
   } catch (error) {
     if (error === 'cancel') {
@@ -1536,8 +1595,8 @@ const submitCreateTemporalProperty = async () => {
     
     createTemporalPropertyDialogVisible.value = false
     
-    // 刷新关系列表
-    await fetchRelationships()
+    // 只更新该关系的时态属性，而不重新加载整个列表
+    await updateRelationshipTemporalProperties(createTemporalPropertyForm.relationshipId)
     
   } catch (error) {
     console.error('创建时态属性失败:', error)
@@ -1830,5 +1889,55 @@ const submitCreateTemporalProperty = async () => {
   margin: 2px 0;
   font-size: 12px;
   color: #909399;
+}
+
+.temporal-loading-placeholder {
+  min-height: 200px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background-color: #fafafa;
+  border-radius: 4px;
+  margin: 10px 0;
+}
+
+.loading-text {
+  color: #409eff;
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+.temporal-charts-container {
+  min-height: 250px; /* 确保容器有固定的最小高度 */
+  position: relative;
+}
+
+.temporal-charts {
+  min-height: 200px; /* 确保图表区域有最小高度 */
+}
+
+.temporal-empty-state {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.chart-container {
+  margin-bottom: 20px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  padding: 16px;
+  background: #fff;
+}
+
+.chart-container h4 {
+  margin: 0 0 16px 0;
+  color: #303133;
+  font-size: 16px;
+  font-weight: 500;
 }
 </style> 
