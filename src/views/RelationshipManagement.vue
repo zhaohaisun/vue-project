@@ -76,8 +76,8 @@
                 </el-descriptions-item>
               </el-descriptions>
               
-              <!-- 时态属性展示区域 -->
-              <div v-if="props.row.temporalProperties && props.row.temporalProperties.length > 0" class="temporal-properties-section">
+              <!-- 时态属性展示区域 - 总是显示，不依赖现有时态属性 -->
+              <div class="temporal-properties-section">
                 <el-divider content-position="left">时态属性</el-divider>
                 
                 <!-- 查询按钮 -->
@@ -139,36 +139,45 @@
                       新建时态属性
                     </el-button>
                   </div>
-                  <div class="temporal-property-item" v-for="property in props.row.temporalProperties" :key="property">
-                    <el-tag 
-                      type="info" 
-                      class="temporal-property-tag"
-                    >
-                      {{ property }}
-                    </el-tag>
-                    <div class="temporal-property-actions">
-                      <el-button 
-                        size="small" 
-                        type="primary" 
-                        @click="openSetTemporalPropertyDialog(props.row.id, property)"
+                  
+                  <!-- 显示现有时态属性或提示信息 -->
+                  <div v-if="props.row.temporalProperties && props.row.temporalProperties.length > 0">
+                    <div class="temporal-property-item" v-for="property in props.row.temporalProperties" :key="property">
+                      <el-tag 
+                        type="info" 
+                        class="temporal-property-tag"
                       >
-                        设置值
-                      </el-button>
-                      <el-button 
-                        size="small" 
-                        type="warning" 
-                        @click="openSetTemporalRangeDialog(props.row.id, property)"
-                      >
-                        设置范围
-                      </el-button>
-                      <el-button 
-                        size="small" 
-                        type="danger" 
-                        @click="deleteTemporalProperty(props.row.id, property)"
-                      >
-                        删除
-                      </el-button>
+                        {{ property }}
+                      </el-tag>
+                      <div class="temporal-property-actions">
+                        <el-button 
+                          size="small" 
+                          type="primary" 
+                          @click="openSetTemporalPropertyDialog(props.row.id, property)"
+                        >
+                          设置值
+                        </el-button>
+                        <el-button 
+                          size="small" 
+                          type="warning" 
+                          @click="openSetTemporalRangeDialog(props.row.id, property)"
+                        >
+                          设置范围
+                        </el-button>
+                        <el-button 
+                          size="small" 
+                          type="danger" 
+                          @click="deleteTemporalProperty(props.row.id, property)"
+                        >
+                          删除
+                        </el-button>
+                      </div>
                     </div>
+                  </div>
+                  
+                  <!-- 无时态属性时的提示 -->
+                  <div v-else class="no-temporal-properties">
+                    <el-empty description="该关系还没有时态属性，点击上方按钮创建" :image-size="60" />
                   </div>
                 </div>
               </div>
@@ -753,8 +762,11 @@ const fetchRelationships = async () => {
         
         // 获取关系的时态属性
         try {
+          console.log(`正在获取关系 ${rel.id} 的时态属性...`)
           const temporalRes = await relationshipApi.getRelationshipTemporalProperties(rel.id)
+          console.log(`关系 ${rel.id} 的时态属性响应:`, temporalRes)
           rel.temporalProperties = temporalRes.data || []
+          console.log(`关系 ${rel.id} 的时态属性列表:`, rel.temporalProperties)
         } catch (error) {
           console.warn(`获取关系 ${rel.id} 的时态属性失败:`, error)
           rel.temporalProperties = []
@@ -1939,5 +1951,13 @@ const submitCreateTemporalProperty = async () => {
   color: #303133;
   font-size: 16px;
   font-weight: 500;
+}
+
+.no-temporal-properties {
+  padding: 20px;
+  text-align: center;
+  background-color: #fafbfc;
+  border-radius: 4px;
+  border: 1px dashed #d9ecff;
 }
 </style> 
