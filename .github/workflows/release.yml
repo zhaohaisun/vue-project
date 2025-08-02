@@ -1,0 +1,64 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+          
+      - name: Set env variable
+        run: |
+          echo "BUILD_TIME=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          echo "COMMIT_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+          echo ${{env.BUILD_TIME}}
+          echo ${{env.COMMIT_SHA_SHORT}}
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build project
+        run: npm run build
+        
+      - name: Create release assets
+        run: |
+          tar -czvf release.tar.gz dist/
+          cp release.tar.gz release.${{env.BUILD_TIME}}.tar.gz
+          cp release.tar.gz release.${{env.COMMIT_SHA_SHORT}}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set env variable
+        run: |
+          echo "BUILD_TIME=$(date +'%Y%m%d')" >> $GITHUB_ENV
+          echo "COMMIT_SHA_SHORT=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+          echo ${{env.BUILD_TIME}}
+          echo ${{env.COMMIT_SHA_SHORT}}
+      
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+          
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release.tar.gz
+            release.${{env.BUILD_TIME}}.tar.gz
+            release.${{env.COMMIT_SHA_SHORT}}.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
