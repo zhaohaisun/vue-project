@@ -28,19 +28,18 @@ jobs:
       - name: Build project
         run: npm run build
         
-      - name: Create release assets
-        run: |
-          tar -czvf release.tar.gz dist/
-          cp release.tar.gz release.${{env.BUILD_TIME}}.tar.gz
-          cp release.tar.gz release.${{env.COMMIT_SHA_SHORT}}.tar.gz
-          
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v2
         with:
-          files: |
-            release.tar.gz
-            release.${{env.BUILD_TIME}}.tar.gz
-            release.${{env.COMMIT_SHA_SHORT}}.tar.gz
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          path: dist/  # 假设构建结果在dist目录
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4
+        
